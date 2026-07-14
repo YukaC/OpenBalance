@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f7f4ef;
+  --paper-deep: #efeae2;
+  --ink: #141414;
+  --ink-muted: #6b6560;
+  --ink-faint: #9a948c;
+  --line: #e4ddd3;
+  --line-strong: #d0c8bc;
+  --surface: #ffffff;
+  --surface-raised: #fffcf8;
+  --income: #1a7a45;
+  --income-soft: #e8f5ee;
+  --expense: #141414;
+  --accent: #1a7a45;
+  --danger: #b42318;
+  --chip: #f0ebe3;
+  --chip-active: #141414;
+  --chip-active-text: #fffcf8;
+  --shadow-sheet: 0 -12px 40px rgba(20, 20, 20, 0.08);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+
+  --font-display: var(--font-newsreader), "Times New Roman", serif;
+  --font-body: var(--font-dm-sans), "Helvetica Neue", sans-serif;
+  --font-number: var(--font-ibm-plex-mono), ui-monospace, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --nav-h: 64px;
+  --fab-size: 56px;
+  --shell-max: 420px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-income: var(--income);
+  --color-income-soft: var(--income-soft);
+  --color-expense: var(--expense);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-chip: var(--chip);
+  --color-chip-active: var(--chip-active);
+  --color-chip-active-text: var(--chip-active-text);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-display);
+  --font-mono: var(--font-number);
+  --shadow-sheet: var(--shadow-sheet);
+}
+
+/* Force light editorial look — ignore prefers-color-scheme dark */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: var(--paper);
+    --foreground: var(--ink);
+  }
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background:
+    radial-gradient(120% 80% at 50% -10%, #fffdf9 0%, transparent 55%),
+    linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.font-mono,
+.tabular-nums {
+  font-family: var(--font-number);
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--income-soft);
+  color: var(--ink);
+}
