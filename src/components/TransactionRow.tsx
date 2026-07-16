@@ -1,6 +1,7 @@
+import { Money } from "@/components/Money";
+import { sanitizeCssColor } from "@/lib/color-utils";
 import { formatShortDate } from "@/lib/dates";
 import type { Category, Transaction } from "@/lib/types";
-import { Money } from "@/components/Money";
 
 interface TransactionRowProps {
   transaction: Transaction;
@@ -15,7 +16,8 @@ function iconBackground(
 ): string {
   if (isIncome) return "var(--green-soft)";
   if (!categoryColor) return "var(--red-soft)";
-  return `color-mix(in srgb, ${categoryColor} 24%, var(--card))`;
+  const safeColor = sanitizeCssColor(categoryColor);
+  return `color-mix(in srgb, ${safeColor} 24%, var(--card))`;
 }
 
 export function TransactionRow({

@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { suggestCategoryId } from "@/lib/classifier";
+import { sanitizeCssColor } from "@/lib/color-utils";
 import { toMonthKey, toWeekIso, todayIso } from "@/lib/dates";
 import {
   DEFAULT_CATEGORIES,
@@ -156,14 +157,23 @@ export const useFinanceStore = create<FinanceState>()(
         set((state) => ({
           categories: [
             ...state.categories,
-            { ...category, id: createId("cat") },
+            {
+              ...category,
+              color: sanitizeCssColor(category.color),
+              id: createId("cat"),
+            },
           ],
         })),
       updateCategory: (id, patch) =>
         set((state) => ({
-          categories: state.categories.map((item) =>
-            item.id === id ? { ...item, ...patch } : item,
-          ),
+          categories: state.categories.map((item) => {
+            if (item.id !== id) return item;
+            const next = { ...item, ...patch };
+            if (patch.color !== undefined) {
+              next.color = sanitizeCssColor(patch.color);
+            }
+            return next;
+          }),
         })),
       addIncomeSource: (source) =>
         set((state) => ({

@@ -121,7 +121,13 @@ export default function TransaccionesView() {
                   <button
                     type="button"
                     aria-label={`Eliminar ${tx.title}`}
-                    onClick={() => deleteTransaction(tx.id)}
+                    onClick={() => {
+                      if (
+                        window.confirm(`¿Eliminar «${tx.title}»?`)
+                      ) {
+                        deleteTransaction(tx.id);
+                      }
+                    }}
                     className="mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[20px] text-[var(--ink-faint)] transition-soft hover:bg-[var(--red-soft)] hover:text-[var(--red)] focus-visible:outline-none active:scale-95"
                   >
                     ×

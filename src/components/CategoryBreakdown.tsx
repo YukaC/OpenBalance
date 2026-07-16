@@ -1,4 +1,5 @@
 import { Money } from "@/components/Money";
+import { sanitizeCssColor } from "@/lib/color-utils";
 import type { MonthSummary } from "@/lib/summaries";
 
 interface CategoryBreakdownProps {
@@ -61,9 +62,11 @@ export function CategoryBreakdown({
   }
 
   const amounts = rows.map((row) => row.amount);
-  const colors = rows.map(
-    (row, index) =>
+  const colors = rows.map((row, index) =>
+    sanitizeCssColor(
       row.category.color || FALLBACK_COLORS[index % FALLBACK_COLORS.length],
+      FALLBACK_COLORS[index % FALLBACK_COLORS.length],
+    ),
   );
   const segments = buildDonutSegments(amounts, colors);
 
