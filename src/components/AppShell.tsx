@@ -4,12 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { WEEKDAY_LABELS } from "@/lib/format";
+import { isPinEnabled } from "@/lib/pin-lock";
+import { needsProfileSetup } from "@/lib/profile-setup";
 import {
   normalizeSection,
   SectionNavContext,
   type AppSection,
 } from "@/lib/section-nav";
 import { useFinanceStore } from "@/store/finance-store";
+import { OnboardingScreen } from "@/components/OnboardingScreen";
+import { PinUnlockScreen } from "@/components/PinUnlockScreen";
 import { TransactionForm } from "@/components/TransactionForm";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -138,11 +142,21 @@ function SectionNavButton({
   );
 }
 
+function AppGateLoading() {
+  return (
+    <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)]">
+      <p className="text-[13px] text-[var(--ink-soft)]">Cargando…</p>
+    </div>
+  );
+}
+
 export function AppShell(_props: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [section, setSection] = useState<AppSection>(() =>
     normalizeSection(pathname),
   );
+  const [isPinUnlocked, setIsPinUnlocked] = useState(false);
+  const [hasPinLock, setHasPinLock] = useState(false);
 
   const navigateToSection = useCallback((href: string) => {
     const nextSection = normalizeSection(href);
@@ -169,10 +183,18 @@ export function AppShell(_props: { children: React.ReactNode }) {
     [section, navigateToSection],
   );
 
+  const hydrated = useFinanceStore((s) => s.hydrated);
   const profile = useFinanceStore((s) => s.profile);
   const isFormOpen = useFinanceStore((s) => s.isFormOpen);
   const openForm = useFinanceStore((s) => s.openForm);
   const closeForm = useFinanceStore((s) => s.closeForm);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const enabled = isPinEnabled();
+    setHasPinLock(enabled);
+    if (!enabled) setIsPinUnlocked(true);
+  }, [hydrated, profile.isSetupComplete]);
 
   useEffect(() => {
     if (!isFormOpen) return;
@@ -182,6 +204,24 @@ export function AppShell(_props: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isFormOpen, closeForm]);
+
+  if (!hydrated) {
+    return <AppGateLoading />;
+  }
+
+  if (needsProfileSetup(profile)) {
+    return <OnboardingScreen />;
+  }
+
+  if (hasPinLock && !isPinUnlocked) {
+    return (
+      <PinUnlockScreen
+        onUnlocked={() => {
+          setIsPinUnlocked(true);
+        }}
+      />
+    );
+  }
 
   const paydayLabel = WEEKDAY_LABELS[profile.paydayWeekday] ?? profile.paydayWeekday;
   const isConfig = section === "/configuracion";

@@ -38,13 +38,13 @@ npx tsc --noEmit
 | `/semanas` | Vista semanal + CTA de ingreso |
 | `/transacciones` | Listado filtrable |
 | `/categorias` | Categorías y keywords del clasificador |
-| `/configuracion` | Día de cobro, export CSV, reset demo |
+| `/configuracion` | Perfil (nombre/email), día de cobro, PIN opcional, export CSV, reset demo |
 
 ## Modelo
 
 Cada transacción guarda fecha real y campos derivados `semana_iso` / `mes` para resumir con el mismo dataset.
 
-Datos demo: julio 2026 (perfil Mariano J., cobro viernes).
+Primera visita: onboarding local (nombre, email, cobro, moneda). El seed demo (Mariano J., julio 2026, `isSetupComplete: true`) se carga con **Restablecer datos demo** y no vuelve a pedir onboarding. PIN opcional en Configuración (hash local `rinde-lock`).
 
 ## Documentación
 

@@ -29,6 +29,8 @@ export interface UserProfile {
   defaultCurrency: "ARS" | "USD";
   paydayWeekday: Weekday;
   initials: string;
+  /** False/undefined until first-run onboarding finishes. Seed demo sets true. */
+  isSetupComplete?: boolean;
 }
 
 export interface IncomeSource {
