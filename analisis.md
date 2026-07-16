@@ -87,8 +87,13 @@ Responsive Test Results:
 
 ## Top 5 acciones
 
-1. Headers de seguridad (CSP estricta + `X-Frame-Options` / `nosniff`).
-2. Code-split de views con `dynamic()`.
-3. Validar colores de categoría antes de meterlos en CSS.
-4. Confirmación al eliminar transacciones.
-5. Actualizar Next cuando exista fix limpio del advisory de PostCSS (no forzar downgrade).
+1. ~~Headers de seguridad (CSP estricta + `X-Frame-Options` / `nosniff`).~~ ✅ `29d4068`
+2. ~~Code-split de views con `dynamic()`.~~ ✅ `0b7df24`
+3. ~~Validar colores de categoría antes de meterlos en CSS.~~ ✅ `f815584`
+4. ~~Confirmación al eliminar transacciones.~~ ✅ `f815584`
+5. ~~Override PostCSS ≥8.5.10 (sin downgrade de Next).~~ ✅ `29d4068`
+
+### Continuación implementacion.md (Fase 2)
+
+- ~~Alertas de gasto por categoría (+20% vs mes anterior).~~ ✅ `1de9525`
+- ~~Editar movimientos existentes.~~ ✅ `666d224` / merge `9f935bd`
