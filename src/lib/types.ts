@@ -29,6 +29,8 @@ export interface UserProfile {
   defaultCurrency: "ARS" | "USD";
   paydayWeekday: Weekday;
   initials: string;
+  /** Remind to load income on payday (in-app + optional Web Notification). */
+  shouldRemindPaydayLoad: boolean;
 }
 
 export interface IncomeSource {

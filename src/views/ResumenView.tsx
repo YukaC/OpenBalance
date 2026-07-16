@@ -5,7 +5,9 @@ import { CategoryBreakdown } from "@/components/CategoryBreakdown";
 import { CategorySpendAlert } from "@/components/CategorySpendAlert";
 import { ExtraordinaryExpenseNote } from "@/components/ExtraordinaryExpenseNote";
 import { MonthBalance } from "@/components/MonthBalance";
+import { MonthComparisonChart } from "@/components/MonthComparisonChart";
 import { MonthNavigator } from "@/components/MonthNavigator";
+import { RecurringExpenseHint } from "@/components/RecurringExpenseHint";
 import { TransactionRow } from "@/components/TransactionRow";
 import { WeekBreakdown } from "@/components/WeekBreakdown";
 import { useNavigateToSection } from "@/lib/section-nav";
@@ -109,6 +111,13 @@ export default function ResumenView() {
         <MonthBalance summary={summary} />
         <WeekBreakdown summary={summary} />
       </div>
+
+      <MonthComparisonChart
+        transactions={transactions}
+        monthKey={selectedMonth}
+      />
+
+      <RecurringExpenseHint />
 
       <section className="grid grid-cols-1 gap-6 min-[880px]:grid-cols-2 min-[880px]:gap-8">
         <div className="flex flex-col gap-4">

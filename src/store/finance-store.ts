@@ -281,6 +281,13 @@ export const useFinanceStore = create<FinanceState>()(
             return nextColor ? { ...category, color: nextColor } : category;
           });
 
+          if (state.profile.shouldRemindPaydayLoad === undefined) {
+            state.profile = {
+              ...state.profile,
+              shouldRemindPaydayLoad: false,
+            };
+          }
+
           state.setHydrated(true);
         }
       },
