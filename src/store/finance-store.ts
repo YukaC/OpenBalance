@@ -23,6 +23,17 @@ import type {
   Weekday,
 } from "@/lib/types";
 
+/** First-run blank profile — onboarding claims it; seed demo uses DEFAULT_PROFILE. */
+const BLANK_PROFILE: UserProfile = {
+  id: "user-1",
+  name: "",
+  email: "",
+  defaultCurrency: "ARS",
+  paydayWeekday: "viernes",
+  initials: "??",
+  isSetupComplete: false,
+};
+
 export type ViewMode = "mes" | "semana";
 
 interface NewTransactionInput {
@@ -83,10 +94,10 @@ function createId(prefix: string): string {
 export const useFinanceStore = create<FinanceState>()(
   persist(
     (set, get) => ({
-      profile: DEFAULT_PROFILE,
+      profile: BLANK_PROFILE,
       categories: DEFAULT_CATEGORIES,
       incomeSources: DEFAULT_INCOME_SOURCES,
-      transactions: SEED_TRANSACTIONS,
+      transactions: [],
       userRules: DEFAULT_USER_RULES,
       selectedMonth: "2026-07",
       selectedWeekIso: null,
@@ -258,6 +269,17 @@ export const useFinanceStore = create<FinanceState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Legacy installs (pre–isSetupComplete): keep using the app without onboarding.
+          if (state.profile.isSetupComplete === undefined) {
+            const looksClaimed =
+              state.profile.name.trim().length > 0 &&
+              state.profile.email.trim().length > 0;
+            state.profile = {
+              ...state.profile,
+              isSetupComplete: looksClaimed,
+            };
+          }
+
           const hasSueldo = state.incomeSources.some(
             (source) => source.id === "src-sueldo" || source.name === "Sueldo",
           );

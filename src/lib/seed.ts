@@ -14,7 +14,9 @@ export const DEFAULT_PROFILE: UserProfile = {
   defaultCurrency: "ARS",
   paydayWeekday: "viernes",
   initials: "MJ",
-};
+  /** Demo seed skips onboarding; "Restablecer datos demo" restores this. */
+  isSetupComplete: true,
+}
 
 export const DEFAULT_CATEGORIES: Category[] = [
   {
