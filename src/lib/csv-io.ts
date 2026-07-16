@@ -1,4 +1,4 @@
-import { METHOD_LABELS } from "@/lib/format";
+import { METHOD_LABELS, parseMoneyInput } from "@/lib/format";
 import type {
   Category,
   IncomeSource,
@@ -125,7 +125,7 @@ export function parseTransactionsCsv(
       continue;
     }
 
-    const amount = Number(String(monto).replace(",", ".").replace(/[^\d.-]/g, ""));
+    const amount = parseMoneyInput(String(monto));
     if (!Number.isFinite(amount) || amount <= 0) {
       skippedCount += 1;
       continue;

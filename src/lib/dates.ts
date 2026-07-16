@@ -3,6 +3,7 @@ import {
   addMonths,
   endOfMonth,
   format,
+  getDate,
   getISOWeek,
   getISOWeekYear,
   parseISO,
@@ -86,9 +87,9 @@ export function formatWeekRangeLabel(start: Date, end: Date): string {
 }
 
 /**
- * 5-day work week that ends on the user's payday.
- * Mid-week → upcoming payday. Weekend after payday → week that just ended
- * (same horizon as getMonthWorkWeeks: weekStart + 6 days).
+ * Full 7-day pay week that ends on the user's payday.
+ * Opens the day after the previous payday (domingo when payday is sábado)
+ * and closes on payday.
  */
 export function getPayWeekBounds(
   reference: Date,
@@ -99,10 +100,10 @@ export function getPayWeekBounds(
   const daysSincePayday = (day - paydayNumber + 7) % 7;
   const daysUntilPayday = (paydayNumber - day + 7) % 7;
   const end =
-    daysSincePayday > 0 && daysSincePayday <= 2
-      ? startOfDay(addDays(reference, -daysSincePayday))
+    daysSincePayday === 0
+      ? startOfDay(reference)
       : startOfDay(addDays(reference, daysUntilPayday));
-  const start = startOfDay(addDays(end, -4));
+  const start = startOfDay(addDays(end, -6));
   return { start, end };
 }
 
@@ -127,8 +128,10 @@ export interface MonthWeekSlice {
 }
 
 /**
- * Work weeks (5 days ending on payday) that intersect the month.
- * Ranges and “current” week follow the selected payday weekday.
+ * Pay weeks (7 days ending on payday) whose payday falls in the month.
+ * If payday lands in the next month, that week belongs there — not here.
+ * Week bounds still span the full domingo→payday range (may start in the
+ * previous calendar month), e.g. Dom 28 Jun — Sáb 4 Jul for July.
  */
 export function getMonthWorkWeeks(
   monthKey: string,
@@ -139,44 +142,98 @@ export function getMonthWorkWeeks(
   const monthEnd = endOfMonth(monthStart);
   const paydayNumber = WEEKDAY_TO_NUMBER[paydayWeekday];
 
-  const scanStart = addDays(monthStart, -4);
-  const daysUntilPayday = (paydayNumber - scanStart.getDay() + 7) % 7;
-  let paydayCursor = startOfDay(addDays(scanStart, daysUntilPayday));
+  const daysUntilFirstPayday = (paydayNumber - monthStart.getDay() + 7) % 7;
+  let paydayCursor = startOfDay(addDays(monthStart, daysUntilFirstPayday));
 
   const weeks: MonthWeekSlice[] = [];
   let index = 1;
 
-  while (paydayCursor <= addDays(monthEnd, 4)) {
+  while (paydayCursor <= monthEnd) {
     const weekEnd = paydayCursor;
-    const weekStart = addDays(weekEnd, -4);
-    const intersects = weekEnd >= monthStart && weekStart <= monthEnd;
+    const weekStart = addDays(weekEnd, -6);
+    const isCurrent =
+      referenceToday >= weekStart && referenceToday <= weekEnd;
 
-    if (intersects) {
-      const clampedStart = weekStart < monthStart ? monthStart : weekStart;
-      const clampedEnd = weekEnd > monthEnd ? monthEnd : weekEnd;
-      const weekHorizonEnd = addDays(weekStart, 6);
-      const isCurrent =
-        referenceToday >= weekStart && referenceToday <= weekHorizonEnd;
-
-      weeks.push({
-        index,
-        start: weekStart,
-        end: weekEnd,
-        weekIso: toWeekIso(weekStart),
-        label: isCurrent ? `Semana ${index} · Hoy` : `Semana ${index}`,
-        rangeLabel: formatWeekRangeLabel(clampedStart, clampedEnd),
-        isCurrent,
-      });
-      index += 1;
-    }
-
+    weeks.push({
+      index,
+      start: weekStart,
+      end: weekEnd,
+      weekIso: toWeekIso(weekStart),
+      label: isCurrent ? `Semana ${index} · Hoy` : `Semana ${index}`,
+      rangeLabel: formatWeekRangeLabel(weekStart, weekEnd),
+      isCurrent,
+    });
+    index += 1;
     paydayCursor = addDays(paydayCursor, 7);
-    if (weeks.length > 6) break;
   }
 
   return weeks;
 }
 
+export function getAppToday(): Date {
+  return new Date();
+}
+
 export function todayIso(): string {
-  return format(new Date(), "yyyy-MM-dd");
+  return format(getAppToday(), "yyyy-MM-dd");
+}
+
+/** Shift a calendar date by N months (keeps day-of-month when possible). */
+export function shiftIsoDateByMonths(dateIso: string, months: number): string {
+  return format(addMonths(parseISO(dateIso), months), "yyyy-MM-dd");
+}
+
+/**
+ * Project a date onto another month, clamping the day to that month's length
+ * (e.g. Jan 31 → Feb 28).
+ */
+export function projectIsoDateToMonth(dateIso: string, monthKey: string): string {
+  const day = getDate(parseISO(dateIso));
+  const monthStart = parseMonthKey(monthKey);
+  const clampedDay = Math.min(day, getDate(endOfMonth(monthStart)));
+  return format(
+    new Date(monthStart.getFullYear(), monthStart.getMonth(), clampedDay),
+    "yyyy-MM-dd",
+  );
+}
+
+/**
+ * Payday ISO date for pay-week `weekIndex` (1-based) in `monthKey`.
+ * Falls back to the last payday when the month has fewer weeks.
+ */
+export function getPayWeekPaydayIso(
+  monthKey: string,
+  weekIndex: number,
+  paydayWeekday: Weekday = "viernes",
+  referenceToday: Date = new Date(),
+): string | null {
+  const weeks = getMonthWorkWeeks(monthKey, referenceToday, paydayWeekday);
+  if (weeks.length === 0) return null;
+  const clampedIndex = Math.max(1, Math.min(weekIndex, weeks.length));
+  return format(weeks[clampedIndex - 1].end, "yyyy-MM-dd");
+}
+
+/**
+ * Infer 1-based pay-week index from a date inside its month.
+ * Prefers exact week match; otherwise day ≤ 15 → 1, else → 4 (or last).
+ */
+export function inferFixedPayWeekIndex(
+  dateIso: string,
+  paydayWeekday: Weekday = "viernes",
+): number {
+  const monthKey = toMonthKey(dateIso);
+  const weeks = getMonthWorkWeeks(monthKey, parseISO(dateIso), paydayWeekday);
+  if (weeks.length === 0) return 1;
+  const date = startOfDay(parseISO(dateIso));
+  const matchIndex = weeks.findIndex(
+    (week) => date >= week.start && date <= week.end,
+  );
+  if (matchIndex >= 0) {
+    // Prefer "cuarta" over a 5th spillover week for late-month dates.
+    if (matchIndex + 1 >= 5 && weeks.length >= 4) return 4;
+    return matchIndex + 1;
+  }
+  const day = getDate(date);
+  if (day <= 15) return 1;
+  return Math.min(4, weeks.length);
 }

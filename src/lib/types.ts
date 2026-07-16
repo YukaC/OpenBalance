@@ -81,7 +81,22 @@ export interface Transaction {
   origin: LoadOrigin;
   title: string;
   isAutoCategorized: boolean;
+  /**
+   * Recurring monthly expense: counted in every month from its start month
+   * onward until the transaction is deleted (or isFixed turned off).
+   */
   isFixed: boolean;
+  /**
+   * For fixed expenses: which pay week of the month (1-based).
+   * Typically 1 (primera) or 4 (cuarta). Placed on that week's payday.
+   */
+  fixedPayWeekIndex?: number | null;
+  /** Links cuota transactions created together (e.g. credit-card installments). */
+  installmentGroupId?: string | null;
+  /** 1-based index within the installment series. */
+  installmentIndex?: number | null;
+  /** Total cuotas in the series. */
+  installmentCount?: number | null;
 }
 
 export interface UserCategoryRule {

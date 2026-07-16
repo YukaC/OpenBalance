@@ -3,10 +3,13 @@ import type {
   Budget,
   Category,
   IncomeSource,
+  LoadOrigin,
+  PaymentMethod,
   Transaction,
+  TransactionType,
   UserCategoryRule,
   UserProfile,
-} from "@/lib/types";
+} from "./types";
 
 export const BACKUP_VERSION = 1 as const;
 
@@ -40,6 +43,65 @@ function isValidProfile(value: unknown): value is UserProfile {
   );
 }
 
+const VALID_TRANSACTION_TYPES = new Set<TransactionType>(["ingreso", "gasto"]);
+const VALID_PAYMENT_METHODS = new Set<PaymentMethod>([
+  "transferencia",
+  "efectivo",
+  "tarjeta_debito",
+  "tarjeta_credito",
+  "otro",
+]);
+const VALID_LOAD_ORIGINS = new Set<LoadOrigin>([
+  "manual",
+  "importado",
+  "recurrente",
+]);
+
+function isValidTransaction(value: unknown): value is Transaction {
+  if (!isObject(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    VALID_TRANSACTION_TYPES.has(value.type as TransactionType) &&
+    typeof value.amount === "number" &&
+    Number.isFinite(value.amount) &&
+    (value.currency === "ARS" || value.currency === "USD") &&
+    typeof value.date === "string" &&
+    VALID_PAYMENT_METHODS.has(value.method as PaymentMethod) &&
+    (value.categoryId === null || typeof value.categoryId === "string") &&
+    (value.incomeSourceId === null ||
+      typeof value.incomeSourceId === "string") &&
+    (value.accountId === undefined ||
+      value.accountId === null ||
+      typeof value.accountId === "string") &&
+    typeof value.note === "string" &&
+    typeof value.weekIso === "string" &&
+    typeof value.month === "string" &&
+    VALID_LOAD_ORIGINS.has(value.origin as LoadOrigin) &&
+    typeof value.title === "string" &&
+    typeof value.isAutoCategorized === "boolean" &&
+    typeof value.isFixed === "boolean"
+  );
+}
+
+function isValidCategory(value: unknown): value is Category {
+  if (!isObject(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    Array.isArray(value.keywords) &&
+    value.keywords.every((keyword) => typeof keyword === "string")
+  );
+}
+
+function isValidAccount(value: unknown): value is Account {
+  if (!isObject(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    (value.currency === "ARS" || value.currency === "USD")
+  );
+}
+
 export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
   let parsed: unknown;
   try {
@@ -62,9 +124,11 @@ export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
   if (!Array.isArray(parsed.transactions)) return null;
   if (!Array.isArray(parsed.userRules)) return null;
 
+  const categories = parsed.categories.filter(isValidCategory);
+  const transactions = parsed.transactions.filter(isValidTransaction);
   const budgets = Array.isArray(parsed.budgets) ? (parsed.budgets as Budget[]) : [];
   const accounts = Array.isArray(parsed.accounts)
-    ? (parsed.accounts as Account[])
+    ? parsed.accounts.filter(isValidAccount)
     : [];
 
   return {
@@ -74,9 +138,9 @@ export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
         ? parsed.exportedAt
         : new Date().toISOString(),
     profile: parsed.profile,
-    categories: parsed.categories as Category[],
+    categories,
     incomeSources: parsed.incomeSources as IncomeSource[],
-    transactions: parsed.transactions as Transaction[],
+    transactions,
     userRules: parsed.userRules as UserCategoryRule[],
     budgets,
     accounts,

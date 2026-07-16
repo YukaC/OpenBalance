@@ -5,13 +5,21 @@ import { persist } from "zustand/middleware";
 import type { FinanceBackupPayload } from "@/lib/backup";
 import { suggestCategoryId } from "@/lib/classifier";
 import { sanitizeCssColor } from "@/lib/color-utils";
-import { toMonthKey, toWeekIso, todayIso } from "@/lib/dates";
+import {
+  getAppToday,
+  inferFixedPayWeekIndex,
+  shiftIsoDateByMonths,
+  toMonthKey,
+  toWeekIso,
+  todayIso,
+} from "@/lib/dates";
 import {
   DEFAULT_ACCOUNTS,
   DEFAULT_CATEGORIES,
   DEFAULT_INCOME_SOURCES,
   DEFAULT_PROFILE,
   DEFAULT_USER_RULES,
+  normalizeIncomeSources,
   SEED_TRANSACTIONS,
 } from "@/lib/seed";
 import type {
@@ -54,8 +62,27 @@ interface NewTransactionInput {
   note: string;
   title: string;
   isFixed?: boolean;
+  /**
+   * For fixed expenses: pay week of the month (1 = primera, 4 = cuarta).
+   */
+  fixedPayWeekIndex?: number;
+  /**
+   * Credit-card installments only: when > 1, splits amount across months.
+   * Ignored when isFixed is true.
+   */
+  installmentCount?: number;
   currency?: "ARS" | "USD";
   origin?: LoadOrigin;
+}
+
+function buildInstallmentAmounts(totalAmount: number, count: number): number[] {
+  const base = Math.floor(totalAmount / count);
+  let remainder = totalAmount - base * count;
+  return Array.from({ length: count }, () => {
+    const amount = base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+    return amount;
+  });
 }
 
 interface FinanceState {
@@ -71,20 +98,31 @@ interface FinanceState {
   viewMode: ViewMode;
   isFormOpen: boolean;
   formPrefillType: TransactionType;
+  formPrefillDate: string | null;
   editingTransactionId: string | null;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
   setSelectedMonth: (monthKey: string) => void;
   setSelectedWeekIso: (weekIso: string | null) => void;
   setViewMode: (mode: ViewMode) => void;
-  openForm: (type?: TransactionType) => void;
+  openForm: (
+    type?: TransactionType,
+    options?: { date?: string },
+  ) => void;
   openFormForEdit: (transactionId: string) => void;
   closeForm: () => void;
   addTransaction: (input: NewTransactionInput) => void;
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
-  deleteTransaction: (id: string) => void;
+  deleteTransaction: (
+    id: string,
+    options?: { deleteInstallmentGroup?: boolean },
+  ) => void;
+  /** Remove duplicate ids / identical payload clones from the ledger. */
+  repairTransactions: () => void;
+  restoreTransactions: (transactions: Transaction[]) => void;
   addCategory: (category: Omit<Category, "id">) => void;
   updateCategory: (id: string, patch: Partial<Category>) => void;
+  removeCategory: (id: string) => void;
   addIncomeSource: (source: Omit<IncomeSource, "id">) => void;
   updateIncomeSource: (id: string, patch: Partial<IncomeSource>) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
@@ -103,11 +141,85 @@ interface FinanceState {
 
 function createId(prefix: string): string {
   const randomUuid = globalThis.crypto?.randomUUID?.();
-  if (randomUuid) return `${prefix}-${randomUuid.slice(0, 8)}`;
+  if (randomUuid) return `${prefix}-${randomUuid}`;
 
   const randomPart = Math.random().toString(36).slice(2, 10);
-  const timePart = Date.now().toString(36).slice(-4);
+  const timePart = Date.now().toString(36);
   return `${prefix}-${randomPart}${timePart}`;
+}
+
+function transactionPayloadKey(transaction: {
+  type: Transaction["type"];
+  amount: number;
+  date: string;
+  title: string;
+  method: Transaction["method"];
+  categoryId: string | null;
+  incomeSourceId: string | null;
+  note?: string;
+}): string {
+  return [
+    transaction.type,
+    transaction.amount,
+    transaction.date,
+    transaction.title,
+    transaction.method,
+    transaction.categoryId ?? "",
+    transaction.incomeSourceId ?? "",
+    (transaction.note ?? "").trim(),
+  ].join("|");
+}
+
+function dedupeTransactionsById(transactions: Transaction[]): Transaction[] {
+  const seenIds = new Set<string>();
+  const unique: Transaction[] = [];
+  for (const transaction of transactions) {
+    if (seenIds.has(transaction.id)) continue;
+    seenIds.add(transaction.id);
+    unique.push(transaction);
+  }
+  return unique;
+}
+
+/** Keep first of each identical payload (newest-first store order). */
+function dedupeIdenticalPayloadTransactions(
+  transactions: Transaction[],
+): Transaction[] {
+  const seenPayloads = new Set<string>();
+  const unique: Transaction[] = [];
+  for (const transaction of transactions) {
+    const payloadKey = transactionPayloadKey(transaction);
+    if (seenPayloads.has(payloadKey)) continue;
+    seenPayloads.add(payloadKey);
+    unique.push(transaction);
+  }
+  return unique;
+}
+
+function sanitizeStoredTransactions(
+  transactions: Transaction[],
+): Transaction[] {
+  return dedupeIdenticalPayloadTransactions(
+    dedupeTransactionsById(transactions),
+  );
+}
+
+function isSameTransactionPayload(
+  existing: Transaction,
+  candidate: {
+    type: Transaction["type"];
+    amount: number;
+    date: string;
+    title: string;
+    method: Transaction["method"];
+    categoryId: string | null;
+    incomeSourceId: string | null;
+    note?: string;
+  },
+): boolean {
+  return (
+    transactionPayloadKey(existing) === transactionPayloadKey(candidate)
+  );
 }
 
 function resolveDefaultAccountId(
@@ -133,11 +245,12 @@ export const useFinanceStore = create<FinanceState>()(
       userRules: DEFAULT_USER_RULES,
       budgets: [],
       accounts: DEFAULT_ACCOUNTS,
-      selectedMonth: "2026-07",
+      selectedMonth: toMonthKey(getAppToday()),
       selectedWeekIso: null,
       viewMode: "mes",
       isFormOpen: false,
       formPrefillType: "ingreso",
+      formPrefillDate: null,
       editingTransactionId: null,
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
@@ -145,10 +258,11 @@ export const useFinanceStore = create<FinanceState>()(
         set({ selectedMonth: monthKey, selectedWeekIso: null }),
       setSelectedWeekIso: (weekIso) => set({ selectedWeekIso: weekIso }),
       setViewMode: (mode) => set({ viewMode: mode }),
-      openForm: (type = "gasto") =>
+      openForm: (type = "gasto", options) =>
         set({
           isFormOpen: true,
           formPrefillType: type,
+          formPrefillDate: options?.date ?? null,
           editingTransactionId: null,
         }),
       openFormForEdit: (transactionId) => {
@@ -160,10 +274,15 @@ export const useFinanceStore = create<FinanceState>()(
           isFormOpen: true,
           editingTransactionId: transactionId,
           formPrefillType: transaction.type,
+          formPrefillDate: null,
         });
       },
       closeForm: () =>
-        set({ isFormOpen: false, editingTransactionId: null }),
+        set({
+          isFormOpen: false,
+          editingTransactionId: null,
+          formPrefillDate: null,
+        }),
       addTransaction: (input) => {
         const suggestion =
           input.type === "gasto" && !input.categoryId
@@ -184,29 +303,111 @@ export const useFinanceStore = create<FinanceState>()(
           input.accountId !== undefined
             ? input.accountId
             : defaultAccountId;
+        const currency = input.currency ?? get().profile.defaultCurrency;
+        const origin = input.origin ?? "manual";
+        const isAutoCategorized =
+          input.type === "gasto" && !input.categoryId && suggestion.isAuto;
+        const isFixed = Boolean(input.isFixed) && input.type === "gasto";
+        const canUseInstallments =
+          input.type === "gasto" &&
+          input.method === "tarjeta_credito" &&
+          !isFixed;
+        const installmentCount = canUseInstallments && input.installmentCount
+          ? Math.max(1, Math.min(24, Math.round(input.installmentCount)))
+          : 1;
+        const startDate = input.date || todayIso();
+        const totalAmount = Math.round(input.amount);
+        const fixedPayWeekIndex = isFixed
+          ? Math.max(
+              1,
+              Math.min(
+                4,
+                Math.round(
+                  input.fixedPayWeekIndex ??
+                    inferFixedPayWeekIndex(
+                      startDate,
+                      get().profile.paydayWeekday,
+                    ),
+                ),
+              ),
+            )
+          : undefined;
 
-        const transaction: Transaction = {
-          id: createId("tx"),
-          type: input.type,
-          amount: input.amount,
-          currency: input.currency ?? get().profile.defaultCurrency,
-          date: input.date || todayIso(),
-          method: input.method,
-          categoryId: input.type === "gasto" ? categoryId : null,
-          incomeSourceId: input.type === "ingreso" ? input.incomeSourceId : null,
-          accountId,
-          note: input.note,
-          title: input.title,
-          weekIso: toWeekIso(input.date || todayIso()),
-          month: toMonthKey(input.date || todayIso()),
-          origin: input.origin ?? "manual",
-          isAutoCategorized:
-            input.type === "gasto" && !input.categoryId && suggestion.isAuto,
-          isFixed: Boolean(input.isFixed),
-        };
+        if (installmentCount === 1) {
+          const transaction: Transaction = {
+            id: createId("tx"),
+            type: input.type,
+            amount: totalAmount,
+            currency,
+            date: startDate,
+            method: input.method,
+            categoryId: input.type === "gasto" ? categoryId : null,
+            incomeSourceId:
+              input.type === "ingreso" ? input.incomeSourceId : null,
+            accountId,
+            note: input.note,
+            title: input.title,
+            weekIso: toWeekIso(startDate),
+            month: toMonthKey(startDate),
+            origin,
+            isAutoCategorized,
+            isFixed,
+            ...(fixedPayWeekIndex != null ? { fixedPayWeekIndex } : {}),
+          };
+
+          const latestTransaction = get().transactions[0];
+          if (
+            latestTransaction &&
+            isSameTransactionPayload(latestTransaction, transaction)
+          ) {
+            // Ignore accidental double-submit (same payload twice in a row).
+            return;
+          }
+
+          set((state) => ({
+            transactions: sanitizeStoredTransactions([
+              transaction,
+              ...state.transactions,
+            ]),
+          }));
+          return;
+        }
+
+        const groupId = createId("inst");
+        const amounts = buildInstallmentAmounts(totalAmount, installmentCount);
+        const installmentTransactions: Transaction[] = amounts.map(
+          (amount, index) => {
+            const dateIso = shiftIsoDateByMonths(startDate, index);
+            const installmentIndex = index + 1;
+            return {
+              id: createId("tx"),
+              type: "gasto" as const,
+              amount,
+              currency,
+              date: dateIso,
+              method: input.method,
+              categoryId,
+              incomeSourceId: null,
+              accountId,
+              note: input.note,
+              title: `${input.title} (${installmentIndex}/${installmentCount})`,
+              weekIso: toWeekIso(dateIso),
+              month: toMonthKey(dateIso),
+              origin,
+              isAutoCategorized,
+              isFixed: false,
+              installmentGroupId: groupId,
+              installmentIndex,
+              installmentCount,
+            };
+          },
+        );
 
         set((state) => ({
-          transactions: [transaction, ...state.transactions],
+          transactions: sanitizeStoredTransactions([
+            ...installmentTransactions,
+            ...state.transactions,
+          ]),
         }));
       },
       updateTransaction: (id, patch) =>
@@ -222,10 +423,48 @@ export const useFinanceStore = create<FinanceState>()(
               : item,
           ),
         })),
-      deleteTransaction: (id) =>
+      deleteTransaction: (id, options) =>
+        set((state) => {
+          const target = state.transactions.find((item) => item.id === id);
+          if (!target) return state;
+
+          if (options?.deleteInstallmentGroup && target.installmentGroupId) {
+            const groupId = target.installmentGroupId;
+            return {
+              transactions: sanitizeStoredTransactions(
+                state.transactions.filter(
+                  (item) => item.installmentGroupId !== groupId,
+                ),
+              ),
+            };
+          }
+
+          const payloadKey = transactionPayloadKey(target);
+          return {
+            transactions: sanitizeStoredTransactions(
+              state.transactions.filter((item) => {
+                if (item.id === id) return false;
+                // Also drop ghost clones (same payload, different id).
+                return transactionPayloadKey(item) !== payloadKey;
+              }),
+            ),
+          };
+        }),
+      repairTransactions: () =>
         set((state) => ({
-          transactions: state.transactions.filter((item) => item.id !== id),
+          transactions: sanitizeStoredTransactions(state.transactions),
         })),
+      restoreTransactions: (restored) =>
+        set((state) => {
+          if (restored.length === 0) return state;
+          const restoredIds = new Set(restored.map((item) => item.id));
+          const withoutDuplicates = state.transactions.filter(
+            (item) => !restoredIds.has(item.id),
+          );
+          return {
+            transactions: [...restored, ...withoutDuplicates],
+          };
+        }),
       addCategory: (category) =>
         set((state) => ({
           categories: [
@@ -248,13 +487,18 @@ export const useFinanceStore = create<FinanceState>()(
             return next;
           }),
         })),
-      addIncomeSource: (source) =>
+      removeCategory: (id) =>
         set((state) => ({
-          incomeSources: [
-            ...state.incomeSources,
-            { ...source, id: createId("src") },
-          ],
+          categories: state.categories.filter((item) => item.id !== id),
+          transactions: state.transactions.map((tx) =>
+            tx.categoryId === id ? { ...tx, categoryId: null } : tx,
+          ),
+          budgets: state.budgets.filter((budget) => budget.categoryId !== id),
+          userRules: state.userRules.filter((rule) => rule.categoryId !== id),
         })),
+      addIncomeSource: () => {
+        // Income motives are fixed: Sueldo, Ingreso extra, Ahorro previo.
+      },
       updateIncomeSource: (id, patch) =>
         set((state) => ({
           incomeSources: state.incomeSources.map((item) =>
@@ -394,11 +638,15 @@ export const useFinanceStore = create<FinanceState>()(
           defaultAccountId:
             payload.profile.defaultAccountId ?? accounts[0]?.id,
         };
+        const normalized = normalizeIncomeSources(
+          payload.incomeSources,
+          payload.transactions,
+        );
         set({
           profile,
           categories: payload.categories,
-          incomeSources: payload.incomeSources,
-          transactions: payload.transactions,
+          incomeSources: normalized.incomeSources,
+          transactions: sanitizeStoredTransactions(normalized.transactions),
           userRules: payload.userRules,
           budgets: payload.budgets ?? [],
           accounts,
@@ -418,7 +666,7 @@ export const useFinanceStore = create<FinanceState>()(
           userRules: DEFAULT_USER_RULES,
           budgets: [],
           accounts: DEFAULT_ACCOUNTS,
-          selectedMonth: "2026-07",
+          selectedMonth: toMonthKey(getAppToday()),
         }),
     }),
     {
@@ -427,7 +675,7 @@ export const useFinanceStore = create<FinanceState>()(
         profile: state.profile,
         categories: state.categories,
         incomeSources: state.incomeSources,
-        transactions: state.transactions,
+        transactions: sanitizeStoredTransactions(state.transactions),
         userRules: state.userRules,
         budgets: state.budgets,
         accounts: state.accounts,
@@ -435,62 +683,68 @@ export const useFinanceStore = create<FinanceState>()(
         viewMode: state.viewMode,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state) {
-          // Legacy installs (pre–isSetupComplete): keep using the app without onboarding.
-          if (state.profile.isSetupComplete === undefined) {
-            const looksClaimed =
-              state.profile.name.trim().length > 0 &&
-              state.profile.email.trim().length > 0;
-            state.profile = {
-              ...state.profile,
-              isSetupComplete: looksClaimed,
-            };
-          }
+        if (!state) return;
 
-          const hasSueldo = state.incomeSources.some(
-            (source) => source.id === "src-sueldo" || source.name === "Sueldo",
-          );
-          if (!hasSueldo) {
-            state.incomeSources = [
-              {
-                id: "src-sueldo",
-                name: "Sueldo",
-                type: "mensual",
-                isRecurring: true,
-              },
-              ...state.incomeSources,
-            ];
-          }
-
-          const defaultColorById = new Map(
-            DEFAULT_CATEGORIES.map((category) => [category.id, category.color]),
-          );
-          state.categories = state.categories.map((category) => {
-            const nextColor = defaultColorById.get(category.id);
-            return nextColor ? { ...category, color: nextColor } : category;
-          });
-
-          if (!Array.isArray(state.budgets)) {
-            state.budgets = [];
-          }
-          if (!Array.isArray(state.accounts) || state.accounts.length === 0) {
-            state.accounts = DEFAULT_ACCOUNTS;
-          }
-          if (!state.profile.defaultAccountId) {
-            state.profile = {
-              ...state.profile,
-              defaultAccountId: state.accounts[0]?.id,
-            };
-          }
-          if (state.profile.shouldRemindPaydayLoad === undefined) {
-            state.profile = {
-              ...state.profile,
-              shouldRemindPaydayLoad: false,
-            };
-          }
-
-          state.setHydrated(true);
+        // Legacy installs (pre–isSetupComplete): keep using the app without onboarding.
+        if (state.profile.isSetupComplete === undefined) {
+          const looksClaimed =
+            state.profile.name.trim().length > 0 &&
+            state.profile.email.trim().length > 0;
+          state.profile = {
+            ...state.profile,
+            isSetupComplete: looksClaimed,
+          };
         }
+
+        const normalized = normalizeIncomeSources(
+          state.incomeSources,
+          state.transactions,
+        );
+        state.incomeSources = normalized.incomeSources;
+        state.transactions = sanitizeStoredTransactions(
+          normalized.transactions,
+        );
+
+        state.categories = state.categories.map((category) => ({
+          ...category,
+          color: sanitizeCssColor(category.color),
+        }));
+
+        if (!Array.isArray(state.budgets)) {
+          state.budgets = [];
+        }
+        if (!Array.isArray(state.accounts) || state.accounts.length === 0) {
+          state.accounts = DEFAULT_ACCOUNTS;
+        }
+        if (!state.profile.defaultAccountId) {
+          state.profile = {
+            ...state.profile,
+            defaultAccountId: state.accounts[0]?.id,
+          };
+        }
+        if (state.profile.shouldRemindPaydayLoad === undefined) {
+          state.profile = {
+            ...state.profile,
+            shouldRemindPaydayLoad: false,
+          };
+        }
+
+        const isFreshInstall =
+          state.transactions.length === 0 &&
+          !state.profile.isSetupComplete &&
+          !state.profile.name.trim();
+        const hasValidSelectedMonth = /^\d{4}-\d{2}$/.test(
+          state.selectedMonth ?? "",
+        );
+        if (isFreshInstall || !hasValidSelectedMonth) {
+          state.selectedMonth = toMonthKey(getAppToday());
+        }
+
+        state.setHydrated(true);
+        // Rewrite localStorage with cleaned ledger (in-place hydrate alone may not persist).
+        queueMicrotask(() => {
+          useFinanceStore.getState().repairTransactions();
+        });
       },
     },
   ),

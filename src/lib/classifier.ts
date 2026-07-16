@@ -16,7 +16,9 @@ export function suggestCategoryId(
 
   for (const category of categories) {
     for (const keyword of category.keywords) {
-      if (normalized.includes(keyword.toLowerCase())) {
+      const normalizedKeyword = keyword.toLowerCase().trim();
+      if (normalizedKeyword.length < 3) continue;
+      if (normalized.includes(normalizedKeyword)) {
         return { categoryId: category.id, isAuto: true };
       }
     }

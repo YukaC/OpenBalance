@@ -4,7 +4,6 @@ import { createContext, useContext } from "react";
 
 export const APP_SECTIONS = [
   "/",
-  "/semanas",
   "/transacciones",
   "/categorias",
   "/configuracion",
@@ -13,7 +12,14 @@ export const APP_SECTIONS = [
 export type AppSection = (typeof APP_SECTIONS)[number];
 
 export function normalizeSection(pathname: string): AppSection {
-  if (pathname === "/" || pathname === "") return "/";
+  if (
+    pathname === "/" ||
+    pathname === "" ||
+    pathname === "/semanas" ||
+    pathname.startsWith("/semanas/")
+  ) {
+    return "/";
+  }
   for (const section of APP_SECTIONS) {
     if (section === "/") continue;
     if (pathname === section || pathname.startsWith(`${section}/`)) {

@@ -108,22 +108,57 @@ export const DEFAULT_INCOME_SOURCES: IncomeSource[] = [
   {
     id: "src-sueldo",
     name: "Sueldo",
-    type: "mensual",
-    isRecurring: true,
-  },
-  {
-    id: "src-changa",
-    name: "Changa fin de semana",
     type: "semanal",
     isRecurring: true,
   },
   {
-    id: "src-freelance",
-    name: "Freelance",
+    id: "src-extra",
+    name: "Ingreso extra",
+    type: "variable",
+    isRecurring: false,
+  },
+  {
+    id: "src-ahorro",
+    name: "Ahorro previo",
     type: "variable",
     isRecurring: false,
   },
 ];
+
+/** Legacy / custom source ids → canonical motivo. */
+const INCOME_SOURCE_ID_ALIASES: Record<string, string> = {
+  "src-sueldo": "src-sueldo",
+  "src-changa": "src-sueldo",
+  "src-cobro": "src-sueldo",
+  "src-freelance": "src-extra",
+  "src-extra": "src-extra",
+  "src-mama": "src-sueldo",
+  "src-ahorro": "src-ahorro",
+};
+
+export function resolveCanonicalIncomeSourceId(
+  incomeSourceId: string | null | undefined,
+): string | null {
+  if (!incomeSourceId) return null;
+  return INCOME_SOURCE_ID_ALIASES[incomeSourceId] ?? "src-extra";
+}
+
+/** Force the three fixed income motives and remap transaction references. */
+export function normalizeIncomeSources(
+  incomeSources: IncomeSource[],
+  transactions: Transaction[],
+): { incomeSources: IncomeSource[]; transactions: Transaction[] } {
+  void incomeSources;
+  return {
+    incomeSources: DEFAULT_INCOME_SOURCES.map((source) => ({ ...source })),
+    transactions: transactions.map((tx) => {
+      if (tx.type !== "ingreso") return tx;
+      const nextId = resolveCanonicalIncomeSourceId(tx.incomeSourceId);
+      if (nextId === tx.incomeSourceId) return tx;
+      return { ...tx, incomeSourceId: nextId };
+    }),
+  };
+}
 
 function tx(
   partial: Omit<Transaction, "weekIso" | "month" | "currency" | "origin"> & {
@@ -159,7 +194,7 @@ export const SEED_TRANSACTIONS: Transaction[] = [
     date: "2026-07-03",
     method: "transferencia",
     categoryId: null,
-    incomeSourceId: "src-changa",
+    incomeSourceId: "src-sueldo",
     note: "",
     title: "Transferencia — changa fin de semana",
     isAutoCategorized: false,
@@ -192,7 +227,7 @@ export const SEED_TRANSACTIONS: Transaction[] = [
     date: "2026-07-06",
     method: "transferencia",
     categoryId: null,
-    incomeSourceId: "src-freelance",
+    incomeSourceId: "src-extra",
     note: "Proyecto web",
     title: "Freelance — proyecto web",
     isAutoCategorized: false,
@@ -207,7 +242,7 @@ export const SEED_TRANSACTIONS: Transaction[] = [
     date: "2026-07-10",
     method: "transferencia",
     categoryId: null,
-    incomeSourceId: "src-changa",
+    incomeSourceId: "src-sueldo",
     note: "",
     title: "Transferencia — changa fin de semana",
     isAutoCategorized: false,
@@ -262,7 +297,7 @@ export const SEED_TRANSACTIONS: Transaction[] = [
     date: "2026-07-17",
     method: "transferencia",
     categoryId: null,
-    incomeSourceId: "src-changa",
+    incomeSourceId: "src-sueldo",
     note: "",
     title: "Transferencia — changa fin de semana",
     isAutoCategorized: false,
@@ -346,7 +381,7 @@ export const SEED_TRANSACTIONS: Transaction[] = [
     date: "2026-06-12",
     method: "transferencia",
     categoryId: null,
-    incomeSourceId: "src-changa",
+    incomeSourceId: "src-sueldo",
     note: "",
     title: "Ingresos junio",
     isAutoCategorized: false,
