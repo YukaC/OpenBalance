@@ -258,7 +258,7 @@ export interface CategorySpendAlert {
   currentAmount: number;
   previousAmount: number;
   /** How many percent above previous month (e.g. 25 = 25% above). */
-  percentAbove: number;
+  percentIncrease: number;
 }
 
 export interface CategoryGrowthInsight {
@@ -287,15 +287,14 @@ function sumExpenseByCategory(
 
 /**
  * Categories where current-month spend is ≥ threshold above previous month.
- * Default threshold: 20%. Skips categories with no previous-month spend.
+ * Default threshold: 0.2 (20%). Skips categories with previousAmount === 0.
  */
-export function getCategorySpendAlerts(
+export function findCategorySpendAlerts(
   transactions: Transaction[],
   categories: Category[],
   monthKey: string,
-  opts?: { thresholdPercent?: number },
+  threshold = 0.2,
 ): CategorySpendAlert[] {
-  const thresholdPercent = opts?.thresholdPercent ?? 20;
   const currentByCategory = sumExpenseByCategory(transactions, monthKey);
   const previousByCategory = sumExpenseByCategory(
     transactions,
@@ -307,20 +306,20 @@ export function getCategorySpendAlerts(
   for (const [categoryId, currentAmount] of currentByCategory) {
     const previousAmount = previousByCategory.get(categoryId) ?? 0;
     if (previousAmount <= 0) continue;
-    const percentAbove =
-      ((currentAmount - previousAmount) / previousAmount) * 100;
-    if (percentAbove < thresholdPercent) continue;
+    const ratioIncrease =
+      (currentAmount - previousAmount) / previousAmount;
+    if (ratioIncrease < threshold) continue;
     const category = categoryById.get(categoryId);
     if (!category) continue;
     alerts.push({
       category,
       currentAmount,
       previousAmount,
-      percentAbove: Math.round(percentAbove),
+      percentIncrease: Math.round(ratioIncrease * 100),
     });
   }
 
-  return alerts.sort((a, b) => b.percentAbove - a.percentAbove);
+  return alerts.sort((a, b) => b.percentIncrease - a.percentIncrease);
 }
 
 /**

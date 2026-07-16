@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { CategoryBreakdown } from "@/components/CategoryBreakdown";
+import { CategorySpendAlert } from "@/components/CategorySpendAlert";
 import { ExtraordinaryExpenseNote } from "@/components/ExtraordinaryExpenseNote";
 import { MonthBalance } from "@/components/MonthBalance";
 import { MonthNavigator } from "@/components/MonthNavigator";
@@ -12,6 +13,7 @@ import {
   filterByMonth,
   filterByWeek,
   buildMonthSummary,
+  findCategorySpendAlerts,
   getExtraordinaryExpense,
   getHormigaDrainAlert,
 } from "@/lib/summaries";
@@ -48,6 +50,11 @@ export default function ResumenView() {
 
   const hormigaDrain = useMemo(
     () => getHormigaDrainAlert(transactions, categories, selectedMonth),
+    [transactions, categories, selectedMonth],
+  );
+
+  const categorySpendAlerts = useMemo(
+    () => findCategorySpendAlerts(transactions, categories, selectedMonth),
     [transactions, categories, selectedMonth],
   );
 
@@ -94,6 +101,7 @@ export default function ResumenView() {
       <section className="grid grid-cols-1 gap-6 min-[880px]:grid-cols-2 min-[880px]:gap-8">
         <div className="flex flex-col gap-4">
           <CategoryBreakdown summary={summary} />
+          <CategorySpendAlert alerts={categorySpendAlerts} />
           <ExtraordinaryExpenseNote
             expense={extraordinaryExpense}
             hormigaDrain={hormigaDrain}
