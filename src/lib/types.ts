@@ -22,7 +22,15 @@ export type Weekday =
   | "sabado"
   | "domingo";
 
-export interface UserProfile {
+/** Soft-delete / sync timestamps — optional until migrate fills them. */
+export interface SyncLifecycle {
+  /** ISO timestamp of last local mutation. */
+  updatedAt?: string;
+  /** Soft-delete tombstone; null/undefined = active. */
+  deletedAt?: string | null;
+}
+
+export interface UserProfile extends SyncLifecycle {
   id: string;
   name: string;
   email: string;
@@ -36,27 +44,27 @@ export interface UserProfile {
   shouldRemindPaydayLoad: boolean;
 }
 
-export interface Account {
+export interface Account extends SyncLifecycle {
   id: string;
   name: string;
   currency: "ARS" | "USD";
 }
 
-export interface Budget {
+export interface Budget extends SyncLifecycle {
   id: string;
   categoryId: string;
   month: string;
   amountLimit: number;
 }
 
-export interface IncomeSource {
+export interface IncomeSource extends SyncLifecycle {
   id: string;
   name: string;
   type: IncomeSourceType;
   isRecurring: boolean;
 }
 
-export interface Category {
+export interface Category extends SyncLifecycle {
   id: string;
   name: string;
   icon: string;
@@ -65,7 +73,7 @@ export interface Category {
   keywords: string[];
 }
 
-export interface Transaction {
+export interface Transaction extends SyncLifecycle {
   id: string;
   type: TransactionType;
   amount: number;
@@ -99,7 +107,7 @@ export interface Transaction {
   installmentCount?: number | null;
 }
 
-export interface UserCategoryRule {
+export interface UserCategoryRule extends SyncLifecycle {
   id: string;
   pattern: string;
   categoryId: string;

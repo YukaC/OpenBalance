@@ -1,3 +1,4 @@
+import { ensureLifecycle } from "./entity-lifecycle";
 import type {
   Account,
   Budget,
@@ -11,10 +12,10 @@ import type {
   UserProfile,
 } from "./types";
 
-export const BACKUP_VERSION = 1 as const;
+export const BACKUP_VERSION = 2 as const;
 
 export interface FinanceBackupPayload {
-  version: typeof BACKUP_VERSION;
+  version: typeof BACKUP_VERSION | 1;
   exportedAt: string;
   profile: UserProfile;
   categories: Category[];
@@ -25,6 +26,7 @@ export interface FinanceBackupPayload {
   accounts: Account[];
   selectedMonth?: string;
   viewMode?: "mes" | "semana";
+  lastSyncedAt?: string | null;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -102,6 +104,13 @@ function isValidAccount(value: unknown): value is Account {
   );
 }
 
+function migrateBackupEntities<T extends { updatedAt?: string; deletedAt?: string | null }>(
+  entities: T[],
+  nowIso: string,
+): T[] {
+  return entities.map((entity) => ensureLifecycle(entity, nowIso));
+}
+
 export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
   let parsed: unknown;
   try {
@@ -112,8 +121,18 @@ export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
 
   if (!isObject(parsed)) return null;
   if (parsed.version !== BACKUP_VERSION && parsed.version !== undefined) {
-    // Accept missing version for flexibility, reject unknown future versions
-    if (typeof parsed.version === "number" && parsed.version > BACKUP_VERSION) {
+    // Accept v1 and missing version; reject unknown future versions.
+    if (
+      typeof parsed.version === "number" &&
+      parsed.version > BACKUP_VERSION
+    ) {
+      return null;
+    }
+    if (
+      typeof parsed.version === "number" &&
+      parsed.version !== 1 &&
+      parsed.version !== BACKUP_VERSION
+    ) {
       return null;
     }
   }
@@ -124,24 +143,46 @@ export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
   if (!Array.isArray(parsed.transactions)) return null;
   if (!Array.isArray(parsed.userRules)) return null;
 
-  const categories = parsed.categories.filter(isValidCategory);
-  const transactions = parsed.transactions.filter(isValidTransaction);
-  const budgets = Array.isArray(parsed.budgets) ? (parsed.budgets as Budget[]) : [];
-  const accounts = Array.isArray(parsed.accounts)
-    ? parsed.accounts.filter(isValidAccount)
-    : [];
+  const nowIso =
+    typeof parsed.exportedAt === "string"
+      ? parsed.exportedAt
+      : new Date().toISOString();
+
+  const categories = migrateBackupEntities(
+    parsed.categories.filter(isValidCategory),
+    nowIso,
+  );
+  const transactions = migrateBackupEntities(
+    parsed.transactions.filter(isValidTransaction),
+    nowIso,
+  );
+  const budgets = migrateBackupEntities(
+    Array.isArray(parsed.budgets) ? (parsed.budgets as Budget[]) : [],
+    nowIso,
+  );
+  const accounts = migrateBackupEntities(
+    Array.isArray(parsed.accounts)
+      ? parsed.accounts.filter(isValidAccount)
+      : [],
+    nowIso,
+  );
+  const incomeSources = migrateBackupEntities(
+    parsed.incomeSources as IncomeSource[],
+    nowIso,
+  );
+  const userRules = migrateBackupEntities(
+    parsed.userRules as UserCategoryRule[],
+    nowIso,
+  );
 
   return {
     version: BACKUP_VERSION,
-    exportedAt:
-      typeof parsed.exportedAt === "string"
-        ? parsed.exportedAt
-        : new Date().toISOString(),
-    profile: parsed.profile,
+    exportedAt: nowIso,
+    profile: ensureLifecycle(parsed.profile, nowIso),
     categories,
-    incomeSources: parsed.incomeSources as IncomeSource[],
+    incomeSources,
     transactions,
-    userRules: parsed.userRules as UserCategoryRule[],
+    userRules,
     budgets,
     accounts,
     selectedMonth:
@@ -150,6 +191,10 @@ export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
       parsed.viewMode === "mes" || parsed.viewMode === "semana"
         ? parsed.viewMode
         : undefined,
+    lastSyncedAt:
+      parsed.lastSyncedAt === null || typeof parsed.lastSyncedAt === "string"
+        ? parsed.lastSyncedAt
+        : null,
   };
 }
 

@@ -12,6 +12,7 @@ import {
   toWeekIso,
   type MonthWeekSlice,
 } from "./dates";
+import { isActive } from "./entity-lifecycle";
 import { formatPercentDelta } from "./format";
 
 export interface MonthSummary {
@@ -101,6 +102,7 @@ export function sumByType(
   const seenIds = new Set<string>();
   let total = 0;
   for (const item of transactions) {
+    if (!isActive(item)) continue;
     if (item.type !== type) continue;
     if (currency && item.currency !== currency) continue;
     if (seenIds.has(item.id)) continue;
@@ -120,6 +122,7 @@ export function filterByMonth(
   const seenIds = new Set<string>();
 
   for (const item of transactions) {
+    if (!isActive(item)) continue;
     if (currency && item.currency !== currency) continue;
     if (seenIds.has(item.id)) continue;
 
@@ -138,17 +141,6 @@ export function filterByMonth(
   }
 
   return result;
-}
-
-export function filterByWeek(
-  transactions: Transaction[],
-  weekStart: Date,
-  weekEnd: Date,
-): Transaction[] {
-  return transactions.filter((item) => {
-    const date = parseISO(item.date);
-    return isWithinInterval(date, { start: weekStart, end: weekEnd });
-  });
 }
 
 /**
@@ -179,6 +171,7 @@ export function filterByPayWeek(
   const seenKeys = new Set<string>();
 
   for (const item of transactions) {
+    if (!isActive(item)) continue;
     if (currency && item.currency !== currency) continue;
 
     if (isRecurringFixedExpense(item)) {
@@ -212,10 +205,10 @@ export function filterByPayWeek(
   return result;
 }
 
-  /**
-   * All transactions in the pay weeks of a month (weeks whose payday falls
-   * in that month). Opening days may spill into the previous calendar month.
-   */
+/**
+ * All transactions in the pay weeks of a month (weeks whose payday falls
+ * in that month). Opening days may spill into the previous calendar month.
+ */
 export function filterByMonthPayWeeks(
   transactions: Transaction[],
   monthKey: string,
@@ -335,19 +328,6 @@ export function buildMonthSummary(
   };
 }
 
-export function averageWeeklyIncome(
-  transactions: Transaction[],
-  monthKey: string,
-  currency?: "ARS" | "USD",
-): number {
-  const incomes = filterByMonth(transactions, monthKey, currency).filter(
-    (item) => item.type === "ingreso",
-  );
-  if (incomes.length === 0) return 0;
-  const weeks = new Set(incomes.map((item) => item.weekIso));
-  return sumByType(incomes, "ingreso", currency) / Math.max(weeks.size, 1);
-}
-
 export interface HormigaDrainAlert {
   category: Category;
   totalAmount: number;
@@ -360,25 +340,36 @@ const HORMIGA_MIN_OCCURRENCES = 3;
 const HORMIGA_MIN_TOTAL = 100_000;
 
 /**
- * Hormiga category that repeats often and drains >100k within the month.
+ * Hormiga category that repeats often and drains >100k within the pay-week month.
  */
 export function getHormigaDrainAlert(
   transactions: Transaction[],
   categories: Category[],
   monthKey: string,
+  paydayWeekday: Weekday = "viernes",
   opts?: {
     minOccurrences?: number;
     minTotal?: number;
     currency?: "ARS" | "USD";
+    referenceToday?: Date;
   },
 ): HormigaDrainAlert | null {
   const minOccurrences = opts?.minOccurrences ?? HORMIGA_MIN_OCCURRENCES;
   const minTotal = opts?.minTotal ?? HORMIGA_MIN_TOTAL;
-  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const activeCategories = categories.filter(isActive);
+  const categoryById = new Map(
+    activeCategories.map((category) => [category.id, category]),
+  );
 
   const byCategory = new Map<string, { totalAmount: number; occurrenceCount: number }>();
 
-  for (const item of filterByMonth(transactions, monthKey, opts?.currency)) {
+  for (const item of filterByMonthPayWeeks(
+    transactions,
+    monthKey,
+    opts?.referenceToday ?? getAppToday(),
+    paydayWeekday,
+    opts?.currency,
+  )) {
     if (item.type !== "gasto" || !item.categoryId) continue;
     const category = categoryById.get(item.categoryId);
     if (!category || category.kind !== "hormiga") continue;
@@ -418,13 +409,24 @@ export interface CategorySpendAlert {
   percentIncrease: number;
 }
 
-function sumExpenseByCategory(
+/**
+ * Expense totals by category for a month's pay weeks.
+ */
+export function sumExpenseByCategory(
   transactions: Transaction[],
   monthKey: string,
+  paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
+  referenceToday: Date = getAppToday(),
 ): Map<string, number> {
   const totals = new Map<string, number>();
-  for (const item of filterByMonth(transactions, monthKey, currency)) {
+  for (const item of filterByMonthPayWeeks(
+    transactions,
+    monthKey,
+    referenceToday,
+    paydayWeekday,
+    currency,
+  )) {
     if (item.type !== "gasto" || !item.categoryId) continue;
     totals.set(
       item.categoryId,
@@ -442,16 +444,25 @@ export function findCategorySpendAlerts(
   transactions: Transaction[],
   categories: Category[],
   monthKey: string,
+  paydayWeekday: Weekday = "viernes",
   threshold = 0.2,
   currency?: "ARS" | "USD",
 ): CategorySpendAlert[] {
-  const currentByCategory = sumExpenseByCategory(transactions, monthKey, currency);
+  const currentByCategory = sumExpenseByCategory(
+    transactions,
+    monthKey,
+    paydayWeekday,
+    currency,
+  );
   const previousByCategory = sumExpenseByCategory(
     transactions,
     previousMonthKey(monthKey),
+    paydayWeekday,
     currency,
   );
-  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const categoryById = new Map(
+    categories.filter(isActive).map((category) => [category.id, category]),
+  );
 
   const alerts: CategorySpendAlert[] = [];
   for (const [categoryId, currentAmount] of currentByCategory) {
@@ -494,13 +505,23 @@ export function findBudgetAlerts(
   categories: Category[],
   budgets: Budget[],
   monthKey: string,
+  paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
 ): BudgetAlert[] {
-  const monthBudgets = budgets.filter((budget) => budget.month === monthKey);
+  const monthBudgets = budgets.filter(
+    (budget) => isActive(budget) && budget.month === monthKey,
+  );
   if (monthBudgets.length === 0) return [];
 
-  const spentByCategory = sumExpenseByCategory(transactions, monthKey, currency);
-  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const spentByCategory = sumExpenseByCategory(
+    transactions,
+    monthKey,
+    paydayWeekday,
+    currency,
+  );
+  const categoryById = new Map(
+    categories.filter(isActive).map((category) => [category.id, category]),
+  );
 
   const alerts: BudgetAlert[] = [];
   for (const budget of monthBudgets) {

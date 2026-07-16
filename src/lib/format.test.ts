@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseMoneyInput } from "./format";
+import { parseMoneyInput, roundAmountForCurrency } from "./format";
 
 describe("parseMoneyInput", () => {
   it("parses plain integers", () => {
@@ -39,5 +39,19 @@ describe("parseMoneyInput", () => {
   it("returns NaN for invalid input", () => {
     assert.ok(Number.isNaN(parseMoneyInput("")));
     assert.ok(Number.isNaN(parseMoneyInput("abc")));
+  });
+});
+
+describe("roundAmountForCurrency", () => {
+  it("rounds ARS to whole pesos", () => {
+    assert.equal(roundAmountForCurrency(10.4, "ARS"), 10);
+    assert.equal(roundAmountForCurrency(10.5, "ARS"), 11);
+    assert.equal(roundAmountForCurrency(270000.2, "ARS"), 270000);
+  });
+
+  it("rounds USD to two decimals", () => {
+    assert.equal(roundAmountForCurrency(10.456, "USD"), 10.46);
+    assert.equal(roundAmountForCurrency(10.454, "USD"), 10.45);
+    assert.equal(roundAmountForCurrency(1.1, "USD"), 1.1);
   });
 });

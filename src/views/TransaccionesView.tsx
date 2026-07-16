@@ -8,6 +8,7 @@ import { MonthNavigator } from "@/components/MonthNavigator";
 import { TransactionRow } from "@/components/TransactionRow";
 import { ViewSkeleton } from "@/components/ViewSkeleton";
 import { parseMonthKey } from "@/lib/dates";
+import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { METHOD_LABELS } from "@/lib/format";
 import { filterByMonthPayWeeks } from "@/lib/summaries";
@@ -601,7 +602,7 @@ export default function TransaccionesView() {
                     >
                       <option value="all">Todas</option>
                       <option value="uncategorized">Sin categoría</option>
-                      {categories.map((category) => (
+                      {categories.filter(isActive).map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.name}
                         </option>
@@ -622,7 +623,7 @@ export default function TransaccionesView() {
                       className={FIELD_CLASS}
                     >
                       <option value="all">Todos</option>
-                      {incomeSources.map((source) => (
+                      {incomeSources.filter(isActive).map((source) => (
                         <option key={source.id} value={source.id}>
                           {source.name}
                         </option>
