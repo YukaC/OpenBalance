@@ -76,6 +76,17 @@ export default function ResumenView() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [transactions, selectedMonth, focusedWeek]);
 
+  const categoriesById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
+
+  const incomeSourcesById = useMemo(
+    () =>
+      new Map(incomeSources.map((incomeSource) => [incomeSource.id, incomeSource])),
+    [incomeSources],
+  );
+
   const listHeading = focusedWeek
     ? focusedWeek.isCurrent
       ? "Gastos de esta semana"
@@ -140,10 +151,12 @@ export default function ResumenView() {
           ) : (
             <div className="pr-1" aria-label={listHeading}>
               {weekTransactions.map((tx) => {
-                const category = categories.find((c) => c.id === tx.categoryId);
-                const incomeSource = incomeSources.find(
-                  (s) => s.id === tx.incomeSourceId,
-                );
+                const category = tx.categoryId
+                  ? categoriesById.get(tx.categoryId)
+                  : undefined;
+                const incomeSource = tx.incomeSourceId
+                  ? incomeSourcesById.get(tx.incomeSourceId)
+                  : undefined;
                 return (
                   <TransactionRow
                     key={tx.id}

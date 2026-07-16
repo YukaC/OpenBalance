@@ -82,6 +82,17 @@ export default function SemanasView() {
     setSelectedWeekIso(weekIso);
   };
 
+  const categoriesById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
+
+  const incomeSourcesById = useMemo(
+    () =>
+      new Map(incomeSources.map((incomeSource) => [incomeSource.id, incomeSource])),
+    [incomeSources],
+  );
+
   if (!hydrated) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center">
@@ -279,10 +290,12 @@ export default function SemanasView() {
             ) : (
               <div aria-label={movementsHeading}>
                 {weekTransactions.map((tx) => {
-                  const category = categories.find((c) => c.id === tx.categoryId);
-                  const incomeSource = incomeSources.find(
-                    (s) => s.id === tx.incomeSourceId,
-                  );
+                  const category = tx.categoryId
+                    ? categoriesById.get(tx.categoryId)
+                    : undefined;
+                  const incomeSource = tx.incomeSourceId
+                    ? incomeSourcesById.get(tx.incomeSourceId)
+                    : undefined;
                   return (
                     <TransactionRow
                       key={tx.id}

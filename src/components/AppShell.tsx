@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { WEEKDAY_LABELS } from "@/lib/format";
 import {
@@ -11,11 +12,30 @@ import {
 import { useFinanceStore } from "@/store/finance-store";
 import { TransactionForm } from "@/components/TransactionForm";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import CategoriasView from "@/views/CategoriasView";
-import ConfiguracionView from "@/views/ConfiguracionView";
-import ResumenView from "@/views/ResumenView";
-import SemanasView from "@/views/SemanasView";
-import TransaccionesView from "@/views/TransaccionesView";
+
+function SectionLoading() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <p className="text-[13px] text-[var(--ink-soft)]">Cargando…</p>
+    </div>
+  );
+}
+
+const ResumenView = dynamic(() => import("@/views/ResumenView"), {
+  loading: SectionLoading,
+});
+const SemanasView = dynamic(() => import("@/views/SemanasView"), {
+  loading: SectionLoading,
+});
+const TransaccionesView = dynamic(() => import("@/views/TransaccionesView"), {
+  loading: SectionLoading,
+});
+const CategoriasView = dynamic(() => import("@/views/CategoriasView"), {
+  loading: SectionLoading,
+});
+const ConfiguracionView = dynamic(() => import("@/views/ConfiguracionView"), {
+  loading: SectionLoading,
+});
 
 const MAIN_NAV_ITEMS = [
   {

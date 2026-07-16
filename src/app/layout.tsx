@@ -6,14 +6,18 @@ import "./globals.css";
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
+  weight: ["400", "600", "700"],
   display: "swap",
   preload: false,
+  adjustFontFallback: true,
 });
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
+  adjustFontFallback: true,
 });
 
 const ibmPlexMono = IBM_Plex_Mono({
@@ -22,6 +26,7 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500", "600"],
   display: "swap",
   preload: false,
+  adjustFontFallback: true,
 });
 
 export const metadata: Metadata = {

@@ -33,6 +33,17 @@ export default function TransaccionesView() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   }, [transactions, selectedMonth, typeFilter]);
 
+  const categoriesById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
+
+  const incomeSourcesById = useMemo(
+    () =>
+      new Map(incomeSources.map((incomeSource) => [incomeSource.id, incomeSource])),
+    [incomeSources],
+  );
+
   if (!hydrated) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -105,10 +116,12 @@ export default function TransaccionesView() {
         ) : (
           <div>
             {filtered.map((tx) => {
-              const category = categories.find((c) => c.id === tx.categoryId);
-              const incomeSource = incomeSources.find(
-                (s) => s.id === tx.incomeSourceId,
-              );
+              const category = tx.categoryId
+                ? categoriesById.get(tx.categoryId)
+                : undefined;
+              const incomeSource = tx.incomeSourceId
+                ? incomeSourcesById.get(tx.incomeSourceId)
+                : undefined;
               return (
                 <div key={tx.id} className="flex items-stretch gap-1">
                   <div className="min-w-0 flex-1">
