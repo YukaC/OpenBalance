@@ -5,9 +5,11 @@ import { ViewSkeleton } from "@/components/ViewSkeleton";
 import type { CurrencyCode } from "@/lib/format";
 import { AccountsSection } from "@/views/configuracion/AccountsSection";
 import { DataSection } from "@/views/configuracion/DataSection";
+import { DownloadAppSection } from "@/views/configuracion/DownloadAppSection";
 import { PaydaySection } from "@/views/configuracion/PaydaySection";
 import { PinSection } from "@/views/configuracion/PinSection";
 import { ProfileSection } from "@/views/configuracion/ProfileSection";
+import { SyncSection } from "@/views/configuracion/SyncSection";
 import {
   useConfiguracionController,
   type ConfigConfirmPending,
@@ -111,6 +113,8 @@ export default function ConfiguracionView() {
         onDisablePin={controller.handleDisablePin}
       />
 
+      <SyncSection />
+
       <DataSection
         csvInputRef={controller.csvInputRef}
         backupInputRef={controller.backupInputRef}
@@ -121,6 +125,8 @@ export default function ConfiguracionView() {
         onRestoreBackup={controller.handleRestoreBackup}
         onReset={controller.handleReset}
       />
+
+      <DownloadAppSection />
 
       <ConfirmDialog
         isOpen={Boolean(confirmCopy)}
