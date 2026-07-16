@@ -26,6 +26,8 @@ export function TransactionForm() {
   const updateTransaction = useFinanceStore((s) => s.updateTransaction);
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
+  const accounts = useFinanceStore((s) => s.accounts);
+  const defaultAccountId = useFinanceStore((s) => s.profile.defaultAccountId);
   const transactions = useFinanceStore((s) => s.transactions);
   const suggestCategory = useFinanceStore((s) => s.suggestCategory);
   const rememberCategoryCorrection = useFinanceStore(
@@ -42,6 +44,9 @@ export function TransactionForm() {
   const [categoryId, setCategoryId] = useState<string>("");
   const [incomeSourceId, setIncomeSourceId] = useState<string>(
     incomeSources[0]?.id ?? "",
+  );
+  const [accountId, setAccountId] = useState<string>(
+    defaultAccountId ?? accounts[0]?.id ?? "",
   );
   const [note, setNote] = useState("");
   const [title, setTitle] = useState("");
@@ -62,9 +67,18 @@ export function TransactionForm() {
   }, [formPrefillType, editingTransactionId]);
 
   useEffect(() => {
+    if (editingTransactionId) return;
+    setAccountId(defaultAccountId ?? accounts[0]?.id ?? "");
+  }, [editingTransactionId, defaultAccountId, accounts]);
+
+  useEffect(() => {
     if (!editingTransactionId) return;
-    const { transactions: storeTransactions, incomeSources: storeIncomeSources } =
-      useFinanceStore.getState();
+    const {
+      transactions: storeTransactions,
+      incomeSources: storeIncomeSources,
+      accounts: storeAccounts,
+      profile,
+    } = useFinanceStore.getState();
     const transaction = storeTransactions.find(
       (item) => item.id === editingTransactionId,
     );
@@ -77,6 +91,12 @@ export function TransactionForm() {
     setCategoryId(transaction.categoryId ?? "");
     setIncomeSourceId(
       transaction.incomeSourceId ?? storeIncomeSources[0]?.id ?? "",
+    );
+    setAccountId(
+      transaction.accountId ??
+        profile.defaultAccountId ??
+        storeAccounts[0]?.id ??
+        "",
     );
     setNote(transaction.note);
     setTitle(transaction.title);
@@ -220,6 +240,7 @@ export function TransactionForm() {
       method,
       categoryId: type === "gasto" ? categoryId || null : null,
       incomeSourceId: type === "ingreso" ? incomeSourceId || null : null,
+      accountId: accountId || null,
       note: note.trim(),
       title: resolvedTitle,
     };
@@ -374,6 +395,28 @@ export function TransactionForm() {
               </select>
             </label>
           </div>
+
+          {accounts.length > 0 ? (
+            <label htmlFor="tx-account" className="mb-3.5 flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+                Cuenta
+              </span>
+              <select
+                id="tx-account"
+                name="accountId"
+                autoComplete="off"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus:border-[var(--ink)]"
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} ({account.currency})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           {type === "ingreso" ? (
             <label htmlFor="tx-income-source" className="mb-3.5 flex flex-col gap-1.5">

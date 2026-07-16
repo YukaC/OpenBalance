@@ -1,5 +1,5 @@
 import { isWithinInterval, parseISO } from "date-fns";
-import type { Category, Transaction, Weekday } from "./types";
+import type { Budget, Category, Transaction, Weekday } from "./types";
 import {
   formatMonthName,
   getMonthWorkWeeks,
@@ -380,4 +380,54 @@ export function getFastestGrowingCategory(
     }
     return item.absoluteGrowth > best.absoluteGrowth ? item : best;
   });
+}
+
+export type BudgetAlertLevel = "warning" | "exceeded";
+
+export interface BudgetAlert {
+  budget: Budget;
+  category: Category;
+  spent: number;
+  amountLimit: number;
+  /** spent / amountLimit, e.g. 0.85 = 85% */
+  ratio: number;
+  percentUsed: number;
+  level: BudgetAlertLevel;
+}
+
+/**
+ * Budgets for the month where spend is ≥ 80% (warning) or ≥ 100% (exceeded).
+ */
+export function findBudgetAlerts(
+  transactions: Transaction[],
+  categories: Category[],
+  budgets: Budget[],
+  monthKey: string,
+): BudgetAlert[] {
+  const monthBudgets = budgets.filter((budget) => budget.month === monthKey);
+  if (monthBudgets.length === 0) return [];
+
+  const spentByCategory = sumExpenseByCategory(transactions, monthKey);
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+
+  const alerts: BudgetAlert[] = [];
+  for (const budget of monthBudgets) {
+    if (budget.amountLimit <= 0) continue;
+    const category = categoryById.get(budget.categoryId);
+    if (!category) continue;
+    const spent = spentByCategory.get(budget.categoryId) ?? 0;
+    const ratio = spent / budget.amountLimit;
+    if (ratio < 0.8) continue;
+    alerts.push({
+      budget,
+      category,
+      spent,
+      amountLimit: budget.amountLimit,
+      ratio,
+      percentUsed: Math.round(ratio * 100),
+      level: ratio >= 1 ? "exceeded" : "warning",
+    });
+  }
+
+  return alerts.sort((a, b) => b.ratio - a.ratio);
 }

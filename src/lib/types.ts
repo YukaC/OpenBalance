@@ -29,6 +29,22 @@ export interface UserProfile {
   defaultCurrency: "ARS" | "USD";
   paydayWeekday: Weekday;
   initials: string;
+  defaultAccountId?: string;
+  /** Remind to load income on payday (in-app + optional Web Notification). */
+  shouldRemindPaydayLoad: boolean;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  currency: "ARS" | "USD";
+}
+
+export interface Budget {
+  id: string;
+  categoryId: string;
+  month: string;
+  amountLimit: number;
 }
 
 export interface IncomeSource {
@@ -56,6 +72,7 @@ export interface Transaction {
   method: PaymentMethod;
   categoryId: string | null;
   incomeSourceId: string | null;
+  accountId?: string | null;
   note: string;
   weekIso: string;
   month: string;

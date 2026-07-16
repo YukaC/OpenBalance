@@ -1,4 +1,5 @@
 import type {
+  Account,
   Category,
   IncomeSource,
   Transaction,
@@ -7,6 +8,14 @@ import type {
 } from "./types";
 import { toMonthKey, toWeekIso } from "./dates";
 
+export const DEFAULT_ACCOUNTS: Account[] = [
+  {
+    id: "acc-principal",
+    name: "Principal",
+    currency: "ARS",
+  },
+];
+
 export const DEFAULT_PROFILE: UserProfile = {
   id: "user-1",
   name: "Mariano J.",
@@ -14,6 +23,8 @@ export const DEFAULT_PROFILE: UserProfile = {
   defaultCurrency: "ARS",
   paydayWeekday: "viernes",
   initials: "MJ",
+  defaultAccountId: "acc-principal",
+  shouldRemindPaydayLoad: false,
 };
 
 export const DEFAULT_CATEGORIES: Category[] = [
@@ -363,6 +374,33 @@ export const SEED_TRANSACTIONS: Transaction[] = [
     note: "Bares",
     title: "Salidas junio",
     isAutoCategorized: false,
+    isFixed: false,
+  }),
+  // Recurring-but-not-fixed demo pair (Fase 2 suggestion card)
+  tx({
+    id: "tx-jun-netflix",
+    type: "gasto",
+    amount: 8900,
+    date: "2026-06-08",
+    method: "tarjeta_debito",
+    categoryId: "cat-servicios",
+    incomeSourceId: null,
+    note: "Suscripción",
+    title: "Netflix",
+    isAutoCategorized: true,
+    isFixed: false,
+  }),
+  tx({
+    id: "tx-jul-netflix",
+    type: "gasto",
+    amount: 8900,
+    date: "2026-07-08",
+    method: "tarjeta_debito",
+    categoryId: "cat-servicios",
+    incomeSourceId: null,
+    note: "Suscripción",
+    title: "Netflix",
+    isAutoCategorized: true,
     isFixed: false,
   }),
 ];
