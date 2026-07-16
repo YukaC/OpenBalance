@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { BudgetAlertBanner } from "@/components/BudgetAlertBanner";
 import { CategoryBreakdown } from "@/components/CategoryBreakdown";
 import { CategorySpendAlert } from "@/components/CategorySpendAlert";
 import { ExtraordinaryExpenseNote } from "@/components/ExtraordinaryExpenseNote";
@@ -15,6 +16,7 @@ import {
   filterByMonth,
   filterByWeek,
   buildMonthSummary,
+  findBudgetAlerts,
   findCategorySpendAlerts,
   getExtraordinaryExpense,
   getHormigaDrainAlert,
@@ -31,6 +33,7 @@ export default function ResumenView() {
   const transactions = useFinanceStore((s) => s.transactions);
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
+  const budgets = useFinanceStore((s) => s.budgets);
   const openFormForEdit = useFinanceStore((s) => s.openFormForEdit);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
 
@@ -59,6 +62,11 @@ export default function ResumenView() {
   const categorySpendAlerts = useMemo(
     () => findCategorySpendAlerts(transactions, categories, selectedMonth),
     [transactions, categories, selectedMonth],
+  );
+
+  const budgetAlerts = useMemo(
+    () => findBudgetAlerts(transactions, categories, budgets, selectedMonth),
+    [transactions, categories, budgets, selectedMonth],
   );
 
   const focusedWeek = useMemo(() => {
@@ -122,6 +130,7 @@ export default function ResumenView() {
       <section className="grid grid-cols-1 gap-6 min-[880px]:grid-cols-2 min-[880px]:gap-8">
         <div className="flex flex-col gap-4">
           <CategoryBreakdown summary={summary} />
+          <BudgetAlertBanner alerts={budgetAlerts} />
           <CategorySpendAlert alerts={categorySpendAlerts} />
           <ExtraordinaryExpenseNote
             expense={extraordinaryExpense}

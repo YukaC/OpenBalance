@@ -1,4 +1,5 @@
 import type {
+  Account,
   Category,
   IncomeSource,
   Transaction,
@@ -6,6 +7,14 @@ import type {
   UserProfile,
 } from "./types";
 import { toMonthKey, toWeekIso } from "./dates";
+
+export const DEFAULT_ACCOUNTS: Account[] = [
+  {
+    id: "acc-principal",
+    name: "Principal",
+    currency: "ARS",
+  },
+];
 
 export const DEFAULT_PROFILE: UserProfile = {
   id: "user-1",
@@ -16,6 +25,7 @@ export const DEFAULT_PROFILE: UserProfile = {
   initials: "MJ",
   /** Demo seed skips onboarding; "Restablecer datos demo" restores this. */
   isSetupComplete: true,
+  defaultAccountId: "acc-principal",
   shouldRemindPaydayLoad: false,
 };
 

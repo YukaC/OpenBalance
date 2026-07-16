@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { EmojiPicker } from "@/components/EmojiPicker";
 import { DEFAULT_CATEGORY_EMOJI } from "@/lib/category-emojis";
+import { formatMonthName } from "@/lib/dates";
+import { formatMoney } from "@/lib/format";
 import type { CategoryKind } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -24,8 +26,13 @@ function parseKeywords(value: string): string[] {
 export default function CategoriasView() {
   const hydrated = useFinanceStore((s) => s.hydrated);
   const categories = useFinanceStore((s) => s.categories);
+  const budgets = useFinanceStore((s) => s.budgets);
+  const selectedMonth = useFinanceStore((s) => s.selectedMonth);
+  const transactions = useFinanceStore((s) => s.transactions);
   const updateCategory = useFinanceStore((s) => s.updateCategory);
   const addCategory = useFinanceStore((s) => s.addCategory);
+  const setBudget = useFinanceStore((s) => s.setBudget);
+  const currency = useFinanceStore((s) => s.profile.defaultCurrency);
 
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(DEFAULT_CATEGORY_EMOJI);
@@ -33,10 +40,31 @@ export default function CategoriasView() {
   const [draftKeywords, setDraftKeywords] = useState<Record<string, string>>(
     {},
   );
+  const [draftBudgets, setDraftBudgets] = useState<Record<string, string>>({});
   const [editingIconCategoryId, setEditingIconCategoryId] = useState<
     string | null
   >(null);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
+
+  const budgetByCategoryId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const budget of budgets) {
+      if (budget.month !== selectedMonth) continue;
+      map.set(budget.categoryId, budget.amountLimit);
+    }
+    return map;
+  }, [budgets, selectedMonth]);
+
+  const spentByCategoryId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const tx of transactions) {
+      if (tx.month !== selectedMonth || tx.type !== "gasto" || !tx.categoryId) {
+        continue;
+      }
+      map.set(tx.categoryId, (map.get(tx.categoryId) ?? 0) + tx.amount);
+    }
+    return map;
+  }, [transactions, selectedMonth]);
 
   if (!hydrated) {
     return (
@@ -50,6 +78,12 @@ export default function CategoriasView() {
     return draftKeywords[id] ?? keywords.join(", ");
   }
 
+  function budgetValue(categoryId: string): string {
+    if (draftBudgets[categoryId] !== undefined) return draftBudgets[categoryId];
+    const limit = budgetByCategoryId.get(categoryId);
+    return limit !== undefined ? String(limit) : "";
+  }
+
   function handleSaveKeywords(id: string, current: string[]) {
     const raw = draftKeywords[id];
     if (raw === undefined) return;
@@ -61,6 +95,25 @@ export default function CategoriasView() {
     setDraftKeywords((prev) => {
       const copy = { ...prev };
       delete copy[id];
+      return copy;
+    });
+  }
+
+  function handleSaveBudget(categoryId: string) {
+    const raw = draftBudgets[categoryId];
+    if (raw === undefined) return;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      setBudget(categoryId, selectedMonth, 0);
+    } else {
+      const amount = Number(trimmed.replace(",", "."));
+      if (Number.isFinite(amount) && amount >= 0) {
+        setBudget(categoryId, selectedMonth, amount);
+      }
+    }
+    setDraftBudgets((prev) => {
+      const copy = { ...prev };
+      delete copy[categoryId];
       return copy;
     });
   }
@@ -170,6 +223,72 @@ export default function CategoriasView() {
                   </div>
                 ) : null}
               </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section
+        className="space-y-3 rounded-[16px] bg-[var(--card)] p-4 shadow-[var(--shadow-card)] ring-1 ring-[var(--line)]"
+        aria-labelledby="budgets-heading"
+      >
+        <div>
+          <h2
+            id="budgets-heading"
+            className="font-display text-[16px] font-semibold text-[var(--ink)]"
+          >
+            Presupuestos
+          </h2>
+          <p className="mt-1 text-[12.5px] text-[var(--ink-soft)]">
+            Tope mensual por categoría · {formatMonthName(selectedMonth)}
+          </p>
+        </div>
+        <div className="space-y-2">
+          {categories.map((category) => {
+            const limit = budgetByCategoryId.get(category.id);
+            const spent = spentByCategoryId.get(category.id) ?? 0;
+            return (
+              <div
+                key={category.id}
+                className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] py-2 last:border-b-0"
+              >
+                <span className="w-[8.5rem] shrink-0 truncate text-[13px] font-semibold text-[var(--ink)]">
+                  {category.icon} {category.name}
+                </span>
+                <label
+                  htmlFor={`budget-${category.id}`}
+                  className="flex min-w-0 flex-1 items-center gap-2"
+                >
+                  <span className="sr-only">
+                    Presupuesto de {category.name}
+                  </span>
+                  <input
+                    id={`budget-${category.id}`}
+                    name={`budget-${category.id}`}
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={budgetValue(category.id)}
+                    onChange={(e) =>
+                      setDraftBudgets((prev) => ({
+                        ...prev,
+                        [category.id]: e.target.value,
+                      }))
+                    }
+                    onBlur={() => handleSaveBudget(category.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    placeholder="Sin tope"
+                    className="min-h-10 w-full min-w-[7rem] rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] px-2.5 py-2 font-mono text-[13px] outline-none transition-soft focus:border-[var(--select)]"
+                  />
+                </label>
+                {limit !== undefined && limit > 0 ? (
+                  <span className="text-[11.5px] text-[var(--ink-soft)]">
+                    {formatMoney(spent, false, currency)} /{" "}
+                    {formatMoney(limit, false, currency)}
+                  </span>
+                ) : null}
+              </div>
             );
           })}
         </div>

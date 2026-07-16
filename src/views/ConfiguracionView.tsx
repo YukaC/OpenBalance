@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { downloadJsonFile, parseFinanceBackup } from "@/lib/backup";
+import { parseTransactionsCsv } from "@/lib/csv-io";
 import { CURRENCY_OPTIONS, METHOD_LABELS, WEEKDAY_LABELS } from "@/lib/format";
 import type { CurrencyCode } from "@/lib/format";
 import {
@@ -45,9 +47,15 @@ export default function ConfiguracionView() {
   const transactions = useFinanceStore((s) => s.transactions);
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
+  const accounts = useFinanceStore((s) => s.accounts);
   const updateProfile = useFinanceStore((s) => s.updateProfile);
   const setPayday = useFinanceStore((s) => s.setPayday);
   const resetToSeed = useFinanceStore((s) => s.resetToSeed);
+  const addTransaction = useFinanceStore((s) => s.addTransaction);
+  const exportBackup = useFinanceStore((s) => s.exportBackup);
+  const restoreBackup = useFinanceStore((s) => s.restoreBackup);
+  const addAccount = useFinanceStore((s) => s.addAccount);
+  const removeAccount = useFinanceStore((s) => s.removeAccount);
 
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
@@ -61,6 +69,12 @@ export default function ConfiguracionView() {
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | "unsupported"
   >("unsupported");
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountCurrency, setNewAccountCurrency] =
+    useState<CurrencyCode>("ARS");
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setName(profile.name);
@@ -159,6 +173,83 @@ export default function ConfiguracionView() {
     URL.revokeObjectURL(url);
   }
 
+  async function handleImportCsv(file: File | undefined) {
+    if (!file) return;
+    setImportMessage(null);
+    try {
+      const text = await file.text();
+      const { rows, skippedCount } = parseTransactionsCsv(
+        text,
+        categories,
+        incomeSources,
+        profile.defaultCurrency,
+      );
+      for (const row of rows) {
+        addTransaction({
+          type: row.type,
+          amount: row.amount,
+          date: row.date,
+          method: row.method,
+          categoryId: row.categoryId,
+          incomeSourceId: row.incomeSourceId,
+          note: row.note,
+          title: row.title,
+          currency: row.currency,
+          origin: row.origin,
+        });
+      }
+      const parts = [`Se importaron ${rows.length} movimientos.`];
+      if (skippedCount > 0) {
+        parts.push(`Se omitieron ${skippedCount} filas inválidas.`);
+      }
+      setImportMessage(parts.join(" "));
+    } catch {
+      setImportMessage("No se pudo leer el CSV.");
+    }
+    if (csvInputRef.current) csvInputRef.current.value = "";
+  }
+
+  function handleExportBackup() {
+    const payload = exportBackup();
+    downloadJsonFile(
+      `rinde-respaldo-${payload.exportedAt.slice(0, 10)}.json`,
+      payload,
+    );
+  }
+
+  async function handleRestoreBackup(file: File | undefined) {
+    if (!file) return;
+    const ok = window.confirm(
+      "¿Restaurar respaldo? Se reemplazan perfil, categorías, movimientos, presupuestos y cuentas.",
+    );
+    if (!ok) {
+      if (backupInputRef.current) backupInputRef.current.value = "";
+      return;
+    }
+    try {
+      const text = await file.text();
+      const payload = parseFinanceBackup(text);
+      if (!payload) {
+        window.alert("El archivo no es un respaldo válido de Rinde.");
+        return;
+      }
+      restoreBackup(payload);
+      setImportMessage("Respaldo restaurado correctamente.");
+    } catch {
+      window.alert("No se pudo leer el respaldo.");
+    }
+    if (backupInputRef.current) backupInputRef.current.value = "";
+  }
+
+  function handleAddAccount(event: React.FormEvent) {
+    event.preventDefault();
+    const trimmed = newAccountName.trim();
+    if (!trimmed) return;
+    addAccount({ name: trimmed, currency: newAccountCurrency });
+    setNewAccountName("");
+    setNewAccountCurrency(profile.defaultCurrency);
+  }
+
   function handleReset() {
     const ok = window.confirm(
       "¿Restablecer datos de demostración? Se reemplazan perfil, categorías y movimientos. El perfil demo (Mariano) queda con setup completo y no vuelve a pedir onboarding.",
@@ -167,6 +258,7 @@ export default function ConfiguracionView() {
     resetToSeed();
     setName("Mariano J.");
     setEmail("mariano@example.com");
+    setImportMessage(null);
   }
 
   async function handleSavePin() {
@@ -331,6 +423,109 @@ export default function ConfiguracionView() {
             }
           </p>
         </div>
+      </section>
+
+      <section
+        className="space-y-3 rounded-[18px] bg-[var(--card)] p-[22px] shadow-[var(--shadow-card)] ring-1 ring-[var(--line)]"
+        aria-labelledby="accounts-heading"
+      >
+        <h2
+          id="accounts-heading"
+          className="font-display text-[16.5px] font-semibold text-[var(--ink)]"
+        >
+          Cuentas
+        </h2>
+        <p className="text-[13px] text-[var(--ink-soft)]">
+          Multi-cuenta lite: cada movimiento puede asociarse a una cuenta.
+        </p>
+        <ul className="space-y-2">
+          {accounts.map((account) => {
+            const isDefault = profile.defaultAccountId === account.id;
+            return (
+              <li
+                key={account.id}
+                className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] py-2 last:border-b-0"
+              >
+                <span className="min-w-0 flex-1 text-[14px] font-semibold text-[var(--ink)]">
+                  {account.name}{" "}
+                  <span className="font-normal text-[var(--ink-soft)]">
+                    · {account.currency}
+                  </span>
+                  {isDefault ? (
+                    <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--ink-faint)]">
+                      Default
+                    </span>
+                  ) : null}
+                </span>
+                {!isDefault ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateProfile({ defaultAccountId: account.id })
+                    }
+                    className="rounded-lg px-2 py-1 text-[12px] font-semibold text-[var(--ink-soft)] hover:bg-[var(--paper-deep)] hover:text-[var(--ink)]"
+                  >
+                    Usar por defecto
+                  </button>
+                ) : null}
+                {accounts.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => removeAccount(account.id)}
+                    className="rounded-lg px-2 py-1 text-[12px] font-semibold text-[var(--red)] hover:bg-[var(--red-soft)]"
+                  >
+                    Quitar
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+        <form
+          onSubmit={handleAddAccount}
+          className="flex flex-wrap items-end gap-2 pt-1"
+        >
+          <label htmlFor="new-account-name" className="flex min-w-[10rem] flex-1 flex-col gap-1.5">
+            <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+              Nueva cuenta
+            </span>
+            <input
+              id="new-account-name"
+              name="accountName"
+              autoComplete="off"
+              value={newAccountName}
+              onChange={(e) => setNewAccountName(e.target.value)}
+              placeholder="Ej. Dólares"
+              className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
+            />
+          </label>
+          <label htmlFor="new-account-currency" className="flex flex-col gap-1.5">
+            <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+              Moneda
+            </span>
+            <select
+              id="new-account-currency"
+              name="accountCurrency"
+              value={newAccountCurrency}
+              onChange={(e) =>
+                setNewAccountCurrency(e.target.value as CurrencyCode)
+              }
+              className="rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
+            >
+              {CURRENCY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.shortLabel}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            className="min-h-11 rounded-xl bg-[var(--ink)] px-4 text-[13px] font-bold text-[var(--ink-contrast)] transition-colors hover:opacity-90"
+          >
+            Agregar
+          </button>
+        </form>
       </section>
 
       <section
@@ -543,6 +738,24 @@ export default function ConfiguracionView() {
         >
           Datos
         </h2>
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          aria-hidden
+          tabIndex={-1}
+          onChange={(e) => handleImportCsv(e.target.files?.[0])}
+        />
+        <input
+          ref={backupInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          aria-hidden
+          tabIndex={-1}
+          onChange={(e) => handleRestoreBackup(e.target.files?.[0])}
+        />
         <button
           type="button"
           onClick={handleExportCsv}
@@ -550,6 +763,32 @@ export default function ConfiguracionView() {
         >
           Exportar CSV
         </button>
+        <button
+          type="button"
+          onClick={() => csvInputRef.current?.click()}
+          className="flex h-12 w-full items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[14px] font-bold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+        >
+          Importar CSV
+        </button>
+        <button
+          type="button"
+          onClick={handleExportBackup}
+          className="flex h-12 w-full items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[14px] font-bold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+        >
+          Respaldo
+        </button>
+        <button
+          type="button"
+          onClick={() => backupInputRef.current?.click()}
+          className="flex h-12 w-full items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[14px] font-bold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)]"
+        >
+          Restaurar respaldo
+        </button>
+        {importMessage ? (
+          <p className="text-[13px] text-[var(--ink-soft)]" role="status">
+            {importMessage}
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={handleReset}
