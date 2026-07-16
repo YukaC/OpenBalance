@@ -1,15 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isValidPinFormat, verifyPin } from "@/lib/pin-lock";
+
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MS = 30_000;
 
 export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [pin, setPin] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isChecking, setIsChecking] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutEndsAt, setLockoutEndsAt] = useState<number | null>(null);
+
+  const isLocked =
+    lockoutEndsAt !== null && Date.now() < lockoutEndsAt;
+
+  useEffect(() => {
+    if (lockoutEndsAt === null) return;
+    const remaining = lockoutEndsAt - Date.now();
+    if (remaining <= 0) {
+      setLockoutEndsAt(null);
+      setFailedAttempts(0);
+      setErrorMessage("");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setLockoutEndsAt(null);
+      setFailedAttempts(0);
+      setErrorMessage("");
+    }, remaining);
+    return () => window.clearTimeout(timer);
+  }, [lockoutEndsAt]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (isLocked) return;
     if (!isValidPinFormat(pin)) {
       setErrorMessage("El PIN debe tener entre 4 y 6 dígitos.");
       return;
@@ -19,10 +45,19 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     try {
       const isValid = await verifyPin(pin);
       if (!isValid) {
-        setErrorMessage("PIN incorrecto.");
+        const nextFailedAttempts = failedAttempts + 1;
+        setFailedAttempts(nextFailedAttempts);
+        if (nextFailedAttempts >= MAX_FAILED_ATTEMPTS) {
+          setLockoutEndsAt(Date.now() + LOCKOUT_MS);
+          setErrorMessage("Demasiados intentos. Esperá 30 segundos.");
+        } else {
+          setErrorMessage("PIN incorrecto.");
+        }
         setPin("");
         return;
       }
+      setFailedAttempts(0);
+      setLockoutEndsAt(null);
       onUnlocked();
     } finally {
       setIsChecking(false);
@@ -33,7 +68,7 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)] px-4 py-8">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-5 rounded-[18px] bg-[var(--card)] p-6 shadow-[var(--shadow-card)] ring-1 ring-[var(--line)] sm:p-8"
+        className="ledger-panel w-full max-w-sm space-y-5 p-6 sm:p-8"
         aria-labelledby="unlock-heading"
       >
         <header className="space-y-2 text-center">
@@ -48,6 +83,9 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           </h1>
           <p className="text-[14px] text-[var(--ink-soft)]">
             Ingresá tu PIN local para continuar.
+          </p>
+          <p className="text-[12.5px] text-[var(--ink-faint)]">
+            Protege la apertura de la app; no cifra el almacenamiento.
           </p>
         </header>
 
@@ -81,7 +119,7 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
 
         <button
           type="submit"
-          disabled={isChecking || pin.length < 4}
+          disabled={isChecking || pin.length < 4 || isLocked}
           className="flex h-12 w-full items-center justify-center rounded-xl bg-[var(--select)] text-[14px] font-bold text-[var(--chip-active-text)] transition-colors hover:brightness-110 disabled:opacity-50"
         >
           {isChecking ? "Comprobando…" : "Entrar"}

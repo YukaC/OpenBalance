@@ -50,11 +50,11 @@ export function CategoryBreakdown({
       <section className="py-1" aria-labelledby="cats-heading">
         <h2
           id="cats-heading"
-          className="mb-3 font-display text-[15.5px] font-semibold text-[var(--ink)] min-[880px]:mb-4 min-[880px]:text-[16.5px]"
+          className="section-heading mb-3 min-[880px]:mb-4"
         >
           Gastos por categoría
         </h2>
-        <p className="text-[13px] text-[var(--ink-soft)]">
+        <p className="text-center text-[13px] text-[var(--ink-soft)]">
           Todavía no hay gastos este mes.
         </p>
       </section>
@@ -69,23 +69,32 @@ export function CategoryBreakdown({
     ),
   );
   const segments = buildDonutSegments(amounts, colors);
+  const donutAriaLabel = [
+    "Gastos por categoría:",
+    ...rows.map(({ category, amount }) => {
+      const sharePercent =
+        totalAmount > 0 ? Math.round((amount / totalAmount) * 100) : 0;
+      return `${category.name} ${sharePercent}%`;
+    }),
+  ].join(" ");
 
   return (
     <section className="py-1" aria-labelledby="cats-heading">
       <h2
         id="cats-heading"
-        className="mb-3 font-display text-[15.5px] font-semibold text-[var(--ink)] min-[880px]:mb-4 min-[880px]:text-[16.5px]"
+        className="section-heading mb-3 min-[880px]:mb-4"
       >
         Gastos por categoría
       </h2>
 
-      <div className="flex items-start gap-4 min-[880px]:items-center min-[880px]:gap-6">
+      <div className="flex flex-col items-center gap-4 min-[880px]:flex-row min-[880px]:items-center min-[880px]:gap-6">
         <svg
           width="96"
           height="96"
           viewBox="0 0 42 42"
           className="hidden h-[120px] w-[120px] shrink-0 min-[880px]:block"
-          aria-hidden
+          role="img"
+          aria-label={donutAriaLabel}
         >
           <circle
             cx="21"
@@ -139,7 +148,11 @@ export function CategoryBreakdown({
                 </div>
                 <div
                   className="h-2 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_8%,var(--paper-deep))]"
-                  role="presentation"
+                  role="meter"
+                  aria-label={`Porcentaje de ${category.name}`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={sharePercent}
                 >
                   <div
                     className="h-full rounded-full transition-[width] duration-300 ease-out motion-safe:transition-[width]"

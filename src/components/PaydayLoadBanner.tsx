@@ -7,6 +7,20 @@ import {
 } from "@/lib/payday-reminder";
 import { useFinanceStore } from "@/store/finance-store";
 
+function getPaydayDismissKey(referenceDate: Date = new Date()): string {
+  const dayKey = referenceDate.toISOString().slice(0, 10);
+  return `rinde-payday-dismiss-${dayKey}`;
+}
+
+function readPaydayDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(getPaydayDismissKey()) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function PaydayLoadBanner() {
   const hydrated = useFinanceStore((s) => s.hydrated);
   const transactions = useFinanceStore((s) => s.transactions);
@@ -15,7 +29,7 @@ export function PaydayLoadBanner() {
     (s) => s.profile.shouldRemindPaydayLoad,
   );
   const openForm = useFinanceStore((s) => s.openForm);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(readPaydayDismissed);
 
   const shouldShow = useMemo(() => {
     if (!hydrated || isDismissed) return false;
@@ -38,6 +52,15 @@ export function PaydayLoadBanner() {
     maybeNotifyPaydayLoad();
   }, [shouldShow]);
 
+  function handleDismiss() {
+    setIsDismissed(true);
+    try {
+      sessionStorage.setItem(getPaydayDismissKey(), "1");
+    } catch {
+      // sessionStorage may be unavailable
+    }
+  }
+
   if (!shouldShow) return null;
 
   return (
@@ -57,7 +80,7 @@ export function PaydayLoadBanner() {
         </div>
         <button
           type="button"
-          onClick={() => setIsDismissed(true)}
+          onClick={handleDismiss}
           className="shrink-0 rounded-lg px-2 py-1 text-[12px] font-semibold text-[var(--ink-soft)] transition-soft hover:text-[var(--ink)]"
           aria-label="Descartar recordatorio"
         >
@@ -67,7 +90,7 @@ export function PaydayLoadBanner() {
       <button
         type="button"
         onClick={() => openForm("ingreso")}
-        className="mt-3 inline-flex min-h-10 items-center justify-center rounded-xl bg-[var(--ink)] px-3.5 text-[13px] font-bold text-[var(--ink-contrast)] transition-soft hover:opacity-90 active:scale-[0.98]"
+        className="mt-3 inline-flex min-h-10 items-center justify-center rounded-xl bg-[var(--select)] px-3.5 text-[13px] font-bold text-[var(--chip-active-text)] transition-soft hover:opacity-90"
       >
         Cargar ingreso
       </button>

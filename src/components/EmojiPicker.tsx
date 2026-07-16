@@ -66,8 +66,8 @@ export function EmojiPicker({
                 compact ? "h-7 text-[15px]" : "h-9 text-[18px]"
               } ${
                 isSelected
-                  ? "bg-[var(--select-soft)] ring-2 ring-[var(--select)] scale-105"
-                  : "hover:bg-[var(--bg)] hover:scale-105 active:scale-95"
+                  ? "bg-[var(--select-soft)] ring-2 ring-[var(--select)]"
+                  : "hover:bg-[var(--bg)]"
               }`}
             >
               {emoji}

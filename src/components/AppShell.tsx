@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
+import { CurrencyProvider } from "@/lib/currency-context";
+import { FOCUS_RING } from "@/lib/focus-ring";
 import { WEEKDAY_LABELS } from "@/lib/format";
 import { isPinEnabled } from "@/lib/pin-lock";
 import { needsProfileSetup } from "@/lib/profile-setup";
@@ -15,32 +17,59 @@ import { useFinanceStore } from "@/store/finance-store";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { PaydayLoadBanner } from "@/components/PaydayLoadBanner";
 import { PinUnlockScreen } from "@/components/PinUnlockScreen";
+import { AppToast } from "@/components/AppToast";
 import { TransactionForm } from "@/components/TransactionForm";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ViewSkeleton } from "@/components/ViewSkeleton";
 
 function SectionLoading() {
-  return (
-    <div className="flex min-h-[40vh] items-center justify-center">
-      <p className="text-[13px] text-[var(--ink-soft)]">Cargando…</p>
-    </div>
-  );
+  return <ViewSkeleton />;
 }
 
-const ResumenView = dynamic(() => import("@/views/ResumenView"), {
-  loading: SectionLoading,
-});
-const SemanasView = dynamic(() => import("@/views/SemanasView"), {
-  loading: SectionLoading,
-});
-const TransaccionesView = dynamic(() => import("@/views/TransaccionesView"), {
-  loading: SectionLoading,
-});
-const CategoriasView = dynamic(() => import("@/views/CategoriasView"), {
-  loading: SectionLoading,
-});
-const ConfiguracionView = dynamic(() => import("@/views/ConfiguracionView"), {
-  loading: SectionLoading,
-});
+const CHUNK_RELOAD_KEY = "rinde-chunk-reload";
+
+function importWithChunkRetry<T extends { default: React.ComponentType }>(
+  importer: () => Promise<T>,
+): Promise<T> {
+  return importer().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    const isChunkError =
+      (error instanceof Error && error.name === "ChunkLoadError") ||
+      /Loading chunk|ChunkLoadError|Failed to fetch dynamically imported module/i.test(
+        message,
+      );
+    if (isChunkError && typeof window !== "undefined") {
+      try {
+        if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+          sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+          window.location.reload();
+          return new Promise<T>(() => {});
+        }
+        sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+      } catch {
+        /* ignore storage failures */
+      }
+    }
+    throw error;
+  });
+}
+
+const ResumenView = dynamic(
+  () => importWithChunkRetry(() => import("@/views/ResumenView")),
+  { loading: SectionLoading },
+);
+const TransaccionesView = dynamic(
+  () => importWithChunkRetry(() => import("@/views/TransaccionesView")),
+  { loading: SectionLoading },
+);
+const CategoriasView = dynamic(
+  () => importWithChunkRetry(() => import("@/views/CategoriasView")),
+  { loading: SectionLoading },
+);
+const ConfiguracionView = dynamic(
+  () => importWithChunkRetry(() => import("@/views/ConfiguracionView")),
+  { loading: SectionLoading },
+);
 
 const MAIN_NAV_ITEMS = [
   {
@@ -53,18 +82,6 @@ const MAIN_NAV_ITEMS = [
         <rect x="14" y="3" width="7" height="5" rx="2" />
         <rect x="14" y="12" width="7" height="9" rx="2" />
         <rect x="3" y="16" width="7" height="5" rx="2" />
-      </svg>
-    ),
-  },
-  {
-    href: "/semanas",
-    label: "Semanas",
-    short: "Semanas",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <rect x="3" y="4" width="18" height="17" rx="2" />
-        <path d="M3 9 h18" />
-        <path d="M8 2 v4M16 2 v4" />
       </svg>
     ),
   },
@@ -98,8 +115,6 @@ function isActivePath(section: string, href: string): boolean {
 
 function renderActiveSection(section: AppSection) {
   switch (section) {
-    case "/semanas":
-      return <SemanasView />;
     case "/transacciones":
       return <TransaccionesView />;
     case "/categorias":
@@ -145,13 +160,14 @@ function SectionNavButton({
 
 function AppGateLoading() {
   return (
-    <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)]">
-      <p className="text-[13px] text-[var(--ink-soft)]">Cargando…</p>
+    <div className="min-h-dvh w-full bg-[var(--bg)] px-[var(--page-pad-x)] pt-[var(--page-pad-y)]">
+      <ViewSkeleton />
     </div>
   );
 }
 
-export function AppShell(_props: { children: React.ReactNode }) {
+export function AppShell({ children: _children }: { children: React.ReactNode }) {
+  void _children;
   const pathname = usePathname();
   const [section, setSection] = useState<AppSection>(() =>
     normalizeSection(pathname),
@@ -168,7 +184,21 @@ export function AppShell(_props: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    try {
+      sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
     setSection(normalizeSection(pathname));
+    if (
+      typeof window !== "undefined" &&
+      (pathname === "/semanas" || pathname.startsWith("/semanas/"))
+    ) {
+      window.history.replaceState(null, "", "/");
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -228,13 +258,20 @@ export function AppShell(_props: { children: React.ReactNode }) {
   const isConfig = section === "/configuracion";
 
   return (
+    <CurrencyProvider currency={profile.defaultCurrency}>
     <SectionNavContext.Provider value={navValue}>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-[var(--card)] focus:px-4 focus:py-2 focus:text-[13px] focus:font-semibold focus:text-[var(--ink)] focus:shadow-[var(--shadow-card)] focus:outline-none focus:ring-2 focus:ring-[var(--select)]"
+      >
+        Ir al contenido
+      </a>
       <div className="app-shell relative mx-auto grid h-dvh w-full max-w-[var(--shell-max)] grid-cols-1 overflow-hidden min-[880px]:grid-cols-[var(--sidebar-w)_1fr]">
         <aside className="hidden h-dvh min-h-0 flex-col border-r border-[var(--line)] bg-[var(--sidebar-bg)] min-[880px]:flex">
           <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-6">
             <SectionNavButton
               href="/"
-              className="group flex shrink-0 items-center gap-3 rounded-xl px-2 py-1.5 transition-soft hover:bg-[var(--paper-deep)] focus-visible:outline-none"
+              className={`group flex shrink-0 items-center gap-3 rounded-xl px-2 py-1.5 transition-soft hover:bg-[var(--paper-deep)] ${FOCUS_RING}`}
               ariaLabel="Rinde — inicio"
               onNavigate={navigateToSection}
             >
@@ -266,7 +303,7 @@ export function AppShell(_props: { children: React.ReactNode }) {
                     href={item.href}
                     onNavigate={navigateToSection}
                     isCurrent={active}
-                    className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-soft focus-visible:outline-none ${
+                    className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-soft ${FOCUS_RING} ${
                       active
                         ? "is-selected font-semibold"
                         : "text-[var(--ink-soft)] hover:bg-[var(--paper-deep)] hover:text-[var(--ink)] active:bg-[var(--paper-deep)]"
@@ -287,7 +324,7 @@ export function AppShell(_props: { children: React.ReactNode }) {
                 href="/configuracion"
                 onNavigate={navigateToSection}
                 isCurrent={isConfig}
-                className={`flex min-h-14 items-center gap-3 rounded-xl border bg-[var(--card)] p-3 transition-soft focus-visible:outline-none hover:shadow-[var(--shadow-nav)] active:scale-[0.99] ${
+                className={`flex min-h-14 items-center gap-3 rounded-xl border bg-[var(--card)] p-3 transition-soft ${FOCUS_RING} hover:shadow-[var(--shadow-nav)] ${
                   isConfig
                     ? "is-selected"
                     : "border-[var(--line)] hover:border-[var(--line-strong)]"
@@ -310,10 +347,10 @@ export function AppShell(_props: { children: React.ReactNode }) {
         </aside>
 
         <div className="relative flex min-h-0 min-w-0 flex-col overflow-hidden pb-[var(--nav-h)] min-[880px]:pb-0">
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--sidebar-bg)]/95 px-[var(--page-pad-x)] py-2.5 pt-[max(0.625rem,var(--safe-top))] backdrop-blur-md min-[880px]:hidden">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--sidebar-bg)] px-[var(--page-pad-x)] py-2.5 pt-[max(0.625rem,var(--safe-top))] min-[880px]:hidden">
             <SectionNavButton
               href="/"
-              className="flex min-h-11 items-center gap-2 rounded-lg px-1 transition-soft focus-visible:outline-none"
+              className={`flex min-h-11 items-center gap-2 rounded-lg px-1 transition-soft ${FOCUS_RING}`}
               ariaLabel="Rinde — inicio"
               onNavigate={navigateToSection}
             >
@@ -342,7 +379,7 @@ export function AppShell(_props: { children: React.ReactNode }) {
                 onNavigate={navigateToSection}
                 ariaLabel={`Perfil de ${profile.name}`}
                 isCurrent={isConfig}
-                className={`flex h-11 w-11 items-center justify-center rounded-full border bg-[var(--gold-soft)] text-[12px] font-bold text-[var(--gold)] transition-soft focus-visible:outline-none active:scale-95 ${
+                className={`flex h-11 w-11 items-center justify-center rounded-full border bg-[var(--gold-soft)] text-[12px] font-bold text-[var(--gold)] transition-soft ${FOCUS_RING} ${
                   isConfig
                     ? "border-[var(--select)] ring-2 ring-[var(--select-soft)]"
                     : "border-[var(--line)] hover:border-[var(--line-strong)]"
@@ -353,9 +390,14 @@ export function AppShell(_props: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="section-main flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-[var(--page-pad-x)] pt-[var(--page-pad-y)] pb-[calc(var(--fab-clearance)+8px)] min-[880px]:px-10 min-[880px]:pt-8 min-[880px]:pb-10">
+          <main
+            id="main-content"
+            className="section-main flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-[var(--page-pad-x)] pt-[var(--page-pad-y)] pb-[calc(var(--fab-clearance)+8px)] min-[880px]:px-10 min-[880px]:pt-8 min-[880px]:pb-10"
+          >
             <PaydayLoadBanner />
-            {renderActiveSection(section)}
+            <div key={section} className="section-enter">
+              {renderActiveSection(section)}
+            </div>
           </main>
         </div>
 
@@ -367,7 +409,7 @@ export function AppShell(_props: { children: React.ReactNode }) {
           aria-label="Móvil"
           aria-hidden={isFormOpen}
         >
-          <div className="mx-auto flex max-w-[var(--shell-max)] justify-around gap-1 border-t border-[var(--line)] bg-[var(--card)]/92 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(31,29,32,0.08)] backdrop-blur-xl dark:shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
+          <div className="mx-auto flex max-w-[var(--shell-max)] justify-around gap-1 border-t border-[var(--line)] bg-[var(--card)] px-2 pt-1.5 shadow-[0_-8px_24px_rgba(31,29,32,0.08)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
             {MAIN_NAV_ITEMS.map((item) => {
               const active = isActivePath(section, item.href);
               return (
@@ -376,7 +418,7 @@ export function AppShell(_props: { children: React.ReactNode }) {
                   href={item.href}
                   onNavigate={navigateToSection}
                   isCurrent={active}
-                  className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[11px] font-semibold leading-tight transition-soft focus-visible:outline-none active:scale-95 ${
+                  className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[11px] font-semibold leading-tight transition-soft ${FOCUS_RING} active:scale-95 ${
                     active
                       ? "text-[var(--select-fg)]"
                       : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
@@ -412,7 +454,9 @@ export function AppShell(_props: { children: React.ReactNode }) {
         ) : null}
 
         {isFormOpen ? <TransactionForm /> : null}
+        <AppToast />
       </div>
     </SectionNavContext.Provider>
+    </CurrencyProvider>
   );
 }

@@ -1,31 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { CURRENCY_OPTIONS, WEEKDAY_LABELS } from "@/lib/format";
+import {
+  CURRENCY_OPTIONS,
+  WEEKDAYS,
+  WEEKDAY_FULL,
+  WEEKDAY_LABELS,
+} from "@/lib/format";
 import type { CurrencyCode } from "@/lib/format";
 import { initialsFromName } from "@/lib/profile-setup";
 import type { Weekday } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
-const WEEKDAYS: Weekday[] = [
-  "lunes",
-  "martes",
-  "miercoles",
-  "jueves",
-  "viernes",
-  "sabado",
-  "domingo",
-];
-
-const WEEKDAY_FULL: Record<Weekday, string> = {
-  lunes: "Lunes",
-  martes: "Martes",
-  miercoles: "Miércoles",
-  jueves: "Jueves",
-  viernes: "Viernes",
-  sabado: "Sábado",
-  domingo: "Domingo",
-};
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function OnboardingScreen() {
   const profile = useFinanceStore((s) => s.profile);
@@ -46,7 +33,7 @@ export function OnboardingScreen() {
       setErrorMessage("Ingresá tu nombre para continuar.");
       return;
     }
-    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+    if (!EMAIL_PATTERN.test(trimmedEmail)) {
       setErrorMessage("Ingresá un email válido.");
       return;
     }
@@ -66,7 +53,7 @@ export function OnboardingScreen() {
     <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)] px-4 py-8">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md space-y-5 rounded-[18px] bg-[var(--card)] p-6 shadow-[var(--shadow-card)] ring-1 ring-[var(--line)] sm:p-8"
+        className="ledger-panel w-full max-w-md space-y-5 p-6 sm:p-8"
         aria-labelledby="onboarding-heading"
       >
         <header className="space-y-2 text-center">
@@ -80,8 +67,9 @@ export function OnboardingScreen() {
             Configurá tu perfil
           </h1>
           <p className="text-[14px] leading-relaxed text-[var(--ink-soft)]">
-            Un paso local — sin cuenta ni servidor. Podés cambiarlo después en
-            Configuración.
+            Un paso local — sin cuenta ni servidor. Tus datos quedan en este
+            dispositivo; podés exportar un respaldo en Configuración cuando
+            quieras.
           </p>
         </header>
 

@@ -1,6 +1,7 @@
 import { Money } from "@/components/Money";
 import { sanitizeCssColor } from "@/lib/color-utils";
 import { formatShortDate } from "@/lib/dates";
+import { formatMoney } from "@/lib/format";
 import type { Category, Transaction } from "@/lib/types";
 
 interface TransactionRowProps {
@@ -41,8 +42,27 @@ export function TransactionRow({
   metaParts.push(formatShortDate(transaction.date));
 
   if (weekLabel) metaParts.push(weekLabel);
-  if (transaction.isAutoCategorized) metaParts.push("auto-clasificado");
-  if (transaction.isFixed) metaParts.push("fijo");
+  if (transaction.isAutoCategorized) metaParts.push("detectado");
+  if (
+    transaction.installmentCount &&
+    transaction.installmentCount > 1 &&
+    transaction.installmentIndex
+  ) {
+    metaParts.push(
+      `cuota ${transaction.installmentIndex}/${transaction.installmentCount}`,
+    );
+  } else if (transaction.isFixed) {
+    metaParts.push("fijo mensual");
+  }
+
+  const typeOrCategoryLabel = isIncome
+    ? "ingreso"
+    : (category?.name ?? "gasto");
+  const amountLabel = formatMoney(
+    isIncome ? transaction.amount : -transaction.amount,
+    true,
+  );
+  const accessibleName = `${transaction.title}, ${typeOrCategoryLabel}, ${amountLabel}`;
 
   return (
     <article
@@ -62,6 +82,7 @@ export function TransactionRow({
       }
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
+      aria-label={onSelect ? accessibleName : undefined}
     >
       <div
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[16px] leading-none transition-soft"
@@ -70,6 +91,9 @@ export function TransactionRow({
       >
         {icon}
       </div>
+      {!onSelect ? (
+        <span className="sr-only">{typeOrCategoryLabel}</span>
+      ) : null}
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-[14px] font-semibold text-[var(--ink)]">
@@ -84,7 +108,8 @@ export function TransactionRow({
         amount={isIncome ? transaction.amount : -transaction.amount}
         withSign
         tone={isIncome ? "income" : "expense"}
-        className={`shrink-0 tabular-nums text-[14px] font-semibold ${
+        currency={transaction.currency}
+        className={`shrink-0 whitespace-nowrap tabular-nums text-[14px] font-semibold ${
           isIncome ? "text-[var(--green)]" : "text-[var(--red)]"
         }`}
       />

@@ -19,14 +19,14 @@ export function BudgetAlertBanner({ alerts }: BudgetAlertBannerProps) {
         return (
           <aside
             key={alert.budget.id}
-            className={`rounded-xl px-3.5 py-3 ring-1 ${
+            className={`insight-panel px-3.5 py-3 text-center ${
               isExceeded
-                ? "bg-[var(--red-soft)] ring-[color-mix(in_srgb,var(--red)_28%,transparent)]"
-                : "bg-[var(--gold-soft)] ring-[color-mix(in_srgb,var(--gold)_28%,transparent)]"
+                ? "bg-[var(--red-soft)]"
+                : "bg-[var(--gold-soft)]"
             }`}
           >
             <p
-              className={`text-[11px] font-semibold uppercase tracking-[0.05em] ${
+              className={`text-[11px] font-semibold ${
                 isExceeded ? "text-[var(--red)]" : "text-[var(--gold)]"
               }`}
             >

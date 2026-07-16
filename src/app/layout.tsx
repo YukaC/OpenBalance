@@ -1,21 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, IBM_Plex_Mono, Inter } from "next/font/google";
+import { Fraunces, IBM_Plex_Mono, Source_Sans_3 } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
+  weight: ["600", "700"],
   display: "swap",
   preload: false,
   adjustFontFallback: true,
 });
 
-const inter = Inter({
-  variable: "--font-inter",
+const sourceSans = Source_Sans_3({
+  variable: "--font-source-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "600", "700"],
   display: "swap",
   adjustFontFallback: true,
 });
@@ -23,7 +23,7 @@ const inter = Inter({
 const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "600"],
   display: "swap",
   preload: false,
   adjustFontFallback: true,
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Rinde",
   },
   icons: {
@@ -49,7 +49,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f3eee6" },
+    { media: "(prefers-color-scheme: light)", color: "#e6e2db" },
     { media: "(prefers-color-scheme: dark)", color: "#1f1d20" },
   ],
 };
@@ -64,12 +64,12 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("rinde-theme");if(t==="dark"){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark"}else{document.documentElement.style.colorScheme="light"}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("rinde-theme");var dark=t==="dark"||((t==="system"||!t)&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark"}else{document.documentElement.style.colorScheme="light"}}catch(e){}})();`,
           }}
         />
       </head>
       <body
-        className={`${fraunces.variable} ${inter.variable} ${inter.className} ${ibmPlexMono.variable} antialiased`}
+        className={`${fraunces.variable} ${sourceSans.variable} ${sourceSans.className} ${ibmPlexMono.variable} antialiased`}
       >
         <AppShell>{children}</AppShell>
       </body>

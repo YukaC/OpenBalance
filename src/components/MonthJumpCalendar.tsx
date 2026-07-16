@@ -13,6 +13,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -74,6 +75,11 @@ export function MonthJumpCalendar({
     () => Math.floor(parseMonthKey(selectedMonth).getFullYear() / 12) * 12,
   );
 
+  const handleClose = useCallback(() => {
+    onClose();
+    anchorRef.current?.focus();
+  }, [onClose, anchorRef]);
+
   useEffect(() => {
     if (!isOpen) return;
     setViewMonth(parseMonthKey(selectedMonth));
@@ -81,6 +87,7 @@ export function MonthJumpCalendar({
     setDecadeStart(
       Math.floor(parseMonthKey(selectedMonth).getFullYear() / 12) * 12,
     );
+    panelRef.current?.focus();
   }, [isOpen, selectedMonth]);
 
   useEffect(() => {
@@ -90,11 +97,11 @@ export function MonthJumpCalendar({
       const target = event.target as Node;
       if (panelRef.current?.contains(target)) return;
       if (anchorRef.current?.contains(target)) return;
-      onClose();
+      handleClose();
     }
 
     function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") handleClose();
     }
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -103,7 +110,7 @@ export function MonthJumpCalendar({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose, anchorRef]);
+  }, [isOpen, handleClose, anchorRef]);
 
   if (!isOpen) return null;
 
@@ -116,13 +123,13 @@ export function MonthJumpCalendar({
   function handlePanelKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.stopPropagation();
-      onClose();
+      handleClose();
     }
   }
 
   function handleSelectDay(day: Date) {
     onSelectDate(day);
-    onClose();
+    handleClose();
   }
 
   function handleSelectYear(year: number) {

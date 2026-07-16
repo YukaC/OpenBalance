@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmojiPicker } from "@/components/EmojiPicker";
+import { ViewSkeleton } from "@/components/ViewSkeleton";
 import { DEFAULT_CATEGORY_EMOJI } from "@/lib/category-emojis";
+import { sanitizeCssColor } from "@/lib/color-utils";
 import { formatMonthName } from "@/lib/dates";
-import { formatMoney } from "@/lib/format";
+import { FOCUS_RING } from "@/lib/focus-ring";
+import { formatMoney, parseMoneyInput } from "@/lib/format";
+import { filterByMonth } from "@/lib/summaries";
 import type { CategoryKind } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -15,6 +20,8 @@ const KIND_LABELS: Record<CategoryKind, string> = {
 };
 
 const KIND_OPTIONS: CategoryKind[] = ["fijo", "variable", "hormiga"];
+
+const DEFAULT_NEW_CATEGORY_COLOR = "#7a6f64";
 
 function parseKeywords(value: string): string[] {
   return value
@@ -30,21 +37,29 @@ export default function CategoriasView() {
   const selectedMonth = useFinanceStore((s) => s.selectedMonth);
   const transactions = useFinanceStore((s) => s.transactions);
   const updateCategory = useFinanceStore((s) => s.updateCategory);
+  const removeCategory = useFinanceStore((s) => s.removeCategory);
   const addCategory = useFinanceStore((s) => s.addCategory);
   const setBudget = useFinanceStore((s) => s.setBudget);
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
 
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(DEFAULT_CATEGORY_EMOJI);
+  const [color, setColor] = useState(DEFAULT_NEW_CATEGORY_COLOR);
   const [kind, setKind] = useState<CategoryKind>("variable");
   const [draftKeywords, setDraftKeywords] = useState<Record<string, string>>(
     {},
   );
+  const [draftNames, setDraftNames] = useState<Record<string, string>>({});
   const [draftBudgets, setDraftBudgets] = useState<Record<string, string>>({});
   const [editingIconCategoryId, setEditingIconCategoryId] = useState<
     string | null
   >(null);
   const [isEmojiOpen, setIsEmojiOpen] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<{
+    id: string;
+    name: string;
+    message: string;
+  } | null>(null);
 
   const budgetByCategoryId = useMemo(() => {
     const map = new Map<string, number>();
@@ -57,25 +72,74 @@ export default function CategoriasView() {
 
   const spentByCategoryId = useMemo(() => {
     const map = new Map<string, number>();
-    for (const tx of transactions) {
-      if (tx.month !== selectedMonth || tx.type !== "gasto" || !tx.categoryId) {
-        continue;
-      }
+    for (const tx of filterByMonth(transactions, selectedMonth, currency)) {
+      if (tx.type !== "gasto" || !tx.categoryId) continue;
       map.set(tx.categoryId, (map.get(tx.categoryId) ?? 0) + tx.amount);
     }
     return map;
-  }, [transactions, selectedMonth]);
+  }, [transactions, selectedMonth, currency]);
+
+  const transactionCountByCategoryId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const tx of transactions) {
+      if (!tx.categoryId) continue;
+      map.set(tx.categoryId, (map.get(tx.categoryId) ?? 0) + 1);
+    }
+    return map;
+  }, [transactions]);
 
   if (!hydrated) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center">
-        <p className="text-[13px] text-[var(--ink-soft)]">Cargando…</p>
-      </div>
-    );
+    return <ViewSkeleton />;
   }
 
   function keywordsValue(id: string, keywords: string[]): string {
     return draftKeywords[id] ?? keywords.join(", ");
+  }
+
+  function categoryNameValue(id: string, currentName: string): string {
+    return draftNames[id] ?? currentName;
+  }
+
+  function handleSaveName(id: string, currentName: string) {
+    const raw = draftNames[id];
+    if (raw === undefined) return;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === currentName) {
+      setDraftNames((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+      return;
+    }
+    updateCategory(id, { name: trimmed });
+    setDraftNames((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+  }
+
+  function handleRemoveCategory(categoryId: string, categoryName: string) {
+    const spentThisMonth = spentByCategoryId.get(categoryId) ?? 0;
+    const transactionCount = transactionCountByCategoryId.get(categoryId) ?? 0;
+    const hasActivity = spentThisMonth > 0 || transactionCount > 0;
+
+    let confirmMessage = `¿Quitar la categoría «${categoryName}»?`;
+    if (hasActivity) {
+      const parts: string[] = [];
+      if (spentThisMonth > 0) {
+        parts.push("tiene gastos este mes");
+      }
+      if (transactionCount > 0) {
+        parts.push(
+          `${transactionCount} ${transactionCount === 1 ? "movimiento asociado" : "movimientos asociados"}`,
+        );
+      }
+      confirmMessage = `«${categoryName}» ${parts.join(" y ")}. Si la quitás, esos movimientos quedarán sin categoría y se borrarán sus presupuestos. ¿Continuar?`;
+    }
+
+    setPendingRemove({ id: categoryId, name: categoryName, message: confirmMessage });
   }
 
   function budgetValue(categoryId: string): string {
@@ -106,7 +170,7 @@ export default function CategoriasView() {
     if (!trimmed) {
       setBudget(categoryId, selectedMonth, 0);
     } else {
-      const amount = Number(trimmed.replace(",", "."));
+      const amount = parseMoneyInput(trimmed);
       if (Number.isFinite(amount) && amount >= 0) {
         setBudget(categoryId, selectedMonth, amount);
       }
@@ -125,29 +189,26 @@ export default function CategoriasView() {
     addCategory({
       name: trimmed,
       icon: icon || DEFAULT_CATEGORY_EMOJI,
-      color: "#7a6f64",
+      color: sanitizeCssColor(color),
       kind,
       keywords: [],
     });
     setName("");
     setIcon(DEFAULT_CATEGORY_EMOJI);
+    setColor(DEFAULT_NEW_CATEGORY_COLOR);
     setKind("variable");
     setIsEmojiOpen(false);
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-4">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="font-display text-[24px] font-semibold text-[var(--ink)]">
-          Categorías
-        </h1>
-        <p className="text-[13px] text-[var(--ink-soft)]">
-          Keywords = auto-clasificación de gastos.
-        </p>
+    <div className="view-stack">
+      <header className="page-header">
+        <h1 className="page-title">Categorías</h1>
+        <p className="page-lede">Palabras que detectan el gasto</p>
       </header>
 
       <section
-        className="flex flex-col rounded-[16px] bg-[var(--card)] p-4 shadow-[var(--shadow-card)] ring-1 ring-[var(--line)]"
+        className="ledger-panel flex flex-col p-4"
         aria-label="Lista de categorías"
       >
         <div aria-label="Categorías guardadas">
@@ -159,6 +220,24 @@ export default function CategoriasView() {
                 className="border-b border-[var(--line)] py-3 first:pt-0 last:border-b-0 last:pb-0"
               >
                 <div className="flex items-center gap-2">
+                  <label
+                    className="relative shrink-0"
+                    aria-label={`Color de ${category.name}`}
+                  >
+                    <span
+                      className="block h-8 w-8 overflow-hidden rounded-lg border border-[var(--line)]"
+                      style={{ backgroundColor: category.color }}
+                    />
+                    <input
+                      type="color"
+                      value={sanitizeCssColor(category.color)}
+                      onChange={(e) =>
+                        updateCategory(category.id, { color: e.target.value })
+                      }
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    />
+                  </label>
+
                   <button
                     type="button"
                     aria-label={`Cambiar ícono de ${category.name}`}
@@ -168,18 +247,43 @@ export default function CategoriasView() {
                         isEditingIcon ? null : category.id,
                       )
                     }
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[16px] leading-none transition-soft focus-visible:outline-none active:scale-95 ${
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[16px] leading-none transition-soft ${FOCUS_RING} ${
                       isEditingIcon
                         ? "bg-[var(--select-soft)] ring-2 ring-[var(--select)]"
                         : "bg-[var(--bg)] hover:bg-[var(--paper-deep)]"
                     }`}
                   >
-                    {category.icon}
+                    <span aria-hidden>{category.icon}</span>
                   </button>
 
-                  <p className="w-[7.5rem] shrink-0 truncate text-[13.5px] font-semibold text-[var(--ink)] sm:w-28">
-                    {category.name}
-                  </p>
+                  <input
+                    id={`category-name-${category.id}`}
+                    name={`categoryName-${category.id}`}
+                    autoComplete="off"
+                    value={categoryNameValue(category.id, category.name)}
+                    onChange={(e) =>
+                      setDraftNames((prev) => ({
+                        ...prev,
+                        [category.id]: e.target.value,
+                      }))
+                    }
+                    onBlur={() => handleSaveName(category.id, category.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    aria-label={`Nombre de ${category.name}`}
+                    className="w-[7.5rem] shrink-0 rounded-xl border border-transparent bg-transparent px-1 py-1 text-[13.5px] font-semibold text-[var(--ink)] outline-none transition-soft focus:border-[var(--line)] focus:bg-[var(--surface-raised)] sm:w-28"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleRemoveCategory(category.id, category.name)
+                    }
+                    className={`shrink-0 rounded-lg px-2 py-1 text-[12px] font-semibold text-[var(--red)] transition-soft hover:bg-[var(--red-soft)] ${FOCUS_RING}`}
+                  >
+                    Quitar
+                  </button>
 
                   <span className="hidden w-14 shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[var(--ink-faint)] sm:block">
                     {KIND_LABELS[category.kind]}
@@ -203,7 +307,7 @@ export default function CategoriasView() {
                       if (e.key === "Enter") e.currentTarget.blur();
                     }}
                     aria-label={`Palabras clave de ${category.name}`}
-                    placeholder="keywords…"
+                    placeholder="ej. uber, rappi, almuerzo"
                     className="min-h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] px-2.5 py-2 text-[12.5px] outline-none transition-soft focus:border-[var(--select)]"
                   />
                 </div>
@@ -229,17 +333,14 @@ export default function CategoriasView() {
       </section>
 
       <section
-        className="space-y-3 rounded-[16px] bg-[var(--card)] p-4 shadow-[var(--shadow-card)] ring-1 ring-[var(--line)]"
+        className="ledger-panel space-y-3 p-4"
         aria-labelledby="budgets-heading"
       >
-        <div>
-          <h2
-            id="budgets-heading"
-            className="font-display text-[16px] font-semibold text-[var(--ink)]"
-          >
+        <div className="section-intro">
+          <h2 id="budgets-heading" className="section-heading">
             Presupuestos
           </h2>
-          <p className="mt-1 text-[12.5px] text-[var(--ink-soft)]">
+          <p className="section-lede">
             Tope mensual por categoría · {formatMonthName(selectedMonth)}
           </p>
         </div>
@@ -295,25 +396,37 @@ export default function CategoriasView() {
       </section>
 
       <section
-        className="space-y-3 rounded-[16px] bg-[var(--card)] p-4 shadow-[var(--shadow-card)] ring-1 ring-[var(--line)]"
+        className="ledger-panel space-y-3 p-4"
         aria-labelledby="add-category-heading"
       >
-        <h2
-          id="add-category-heading"
-          className="font-display text-[16px] font-semibold text-[var(--ink)]"
-        >
+        <h2 id="add-category-heading" className="section-heading">
           Nueva categoría
         </h2>
         <form onSubmit={handleAdd} className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
+            <label
+              className="relative shrink-0"
+              aria-label="Color de categoría"
+            >
+              <span
+                className="block h-11 w-11 overflow-hidden rounded-xl border border-[var(--line)]"
+                style={{ backgroundColor: sanitizeCssColor(color) }}
+              />
+              <input
+                type="color"
+                value={sanitizeCssColor(color)}
+                onChange={(e) => setColor(e.target.value)}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </label>
             <button
               type="button"
               aria-label="Elegir ícono"
               aria-expanded={isEmojiOpen}
               onClick={() => setIsEmojiOpen((open) => !open)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[18px] leading-none transition-soft hover:bg-[var(--paper-deep)] focus-visible:outline-none active:scale-95"
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[18px] leading-none transition-soft hover:bg-[var(--paper-deep)] ${FOCUS_RING}`}
             >
-              {icon}
+              <span aria-hidden>{icon}</span>
             </button>
             <input
               id="new-category-name"
@@ -334,7 +447,7 @@ export default function CategoriasView() {
                     key={option}
                     type="button"
                     onClick={() => setKind(option)}
-                    className={`min-h-10 rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-soft focus-visible:outline-none active:scale-95 ${
+                    className={`min-h-10 rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition-soft ${FOCUS_RING} active:scale-95 ${
                       active
                         ? "is-selected-solid"
                         : "bg-[var(--bg)] text-[var(--ink-soft)] hover:text-[var(--ink)]"
@@ -347,7 +460,7 @@ export default function CategoriasView() {
             </div>
             <button
               type="submit"
-              className="min-h-11 shrink-0 rounded-xl bg-[var(--ink)] px-4 text-[13px] font-bold text-[var(--ink-contrast)] transition-soft hover:opacity-90 focus-visible:outline-none active:scale-[0.98]"
+              className={`min-h-11 shrink-0 rounded-xl bg-[var(--select)] px-4 text-[13px] font-bold text-[var(--chip-active-text)] transition-soft hover:opacity-90 ${FOCUS_RING}`}
             >
               Agregar
             </button>
@@ -366,6 +479,19 @@ export default function CategoriasView() {
           ) : null}
         </form>
       </section>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingRemove)}
+        title={pendingRemove ? `Quitar ${pendingRemove.name}` : ""}
+        message={pendingRemove?.message ?? ""}
+        confirmLabel="Quitar"
+        isDestructive
+        onConfirm={() => {
+          if (pendingRemove) removeCategory(pendingRemove.id);
+          setPendingRemove(null);
+        }}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { formatMoney, type CurrencyCode } from "@/lib/format";
-import { useFinanceStore } from "@/store/finance-store";
+import { useDefaultCurrency } from "@/lib/currency-context";
 
 interface MoneyProps {
   amount: number;
@@ -25,8 +25,8 @@ export function Money({
   useMono = true,
   currency: currencyProp,
 }: MoneyProps) {
-  const profileCurrency = useFinanceStore((s) => s.profile.defaultCurrency);
-  const currency = currencyProp ?? profileCurrency;
+  const defaultCurrency = useDefaultCurrency();
+  const currency = currencyProp ?? defaultCurrency;
 
   const color = hasTextColorClass(className)
     ? ""

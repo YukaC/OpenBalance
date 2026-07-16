@@ -4,8 +4,8 @@
   "description": "Finanzas personales — resumen semanal y mensual",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f3eee6",
-  "theme_color": "#803e2f",
+  "background_color": "#e6e2db",
+  "theme_color": "#6e372c",
   "lang": "es",
   "icons": [
     {
@@ -13,6 +13,12 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }
