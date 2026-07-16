@@ -323,15 +323,16 @@ export function findCategorySpendAlerts(
 }
 
 /**
- * Category with the largest growth vs previous month.
- * Prefers highest % among categories with previous spend > 0;
- * otherwise falls back to largest absolute increase.
+ * Categories ranked by spend growth vs previous month.
+ * Sorts by percentGrowth (desc) when previousAmount > 0; otherwise by absoluteGrowth.
+ * Excludes non-positive growth. Default limit: 3.
  */
-export function getFastestGrowingCategory(
+export function rankCategoryGrowth(
   transactions: Transaction[],
   categories: Category[],
   monthKey: string,
-): CategoryGrowthInsight | null {
+  limit = 3,
+): CategoryGrowthInsight[] {
   const currentByCategory = sumExpenseByCategory(transactions, monthKey);
   const previousByCategory = sumExpenseByCategory(
     transactions,
@@ -364,22 +365,37 @@ export function getFastestGrowingCategory(
     });
   }
 
-  if (candidates.length === 0) return null;
+  return candidates
+    .sort((left, right) => {
+      const leftHasPercent = left.percentGrowth !== null;
+      const rightHasPercent = right.percentGrowth !== null;
 
-  const withPercent = candidates.filter(
-    (item) => item.percentGrowth !== null,
-  );
-  const pool = withPercent.length > 0 ? withPercent : candidates;
-
-  return pool.reduce((best, item) => {
-    if (item.percentGrowth !== null && best.percentGrowth !== null) {
-      if (item.percentGrowth !== best.percentGrowth) {
-        return item.percentGrowth > best.percentGrowth ? item : best;
+      if (leftHasPercent && rightHasPercent) {
+        if (left.percentGrowth !== right.percentGrowth) {
+          return (right.percentGrowth ?? 0) - (left.percentGrowth ?? 0);
+        }
+        return right.absoluteGrowth - left.absoluteGrowth;
       }
-      return item.absoluteGrowth > best.absoluteGrowth ? item : best;
-    }
-    return item.absoluteGrowth > best.absoluteGrowth ? item : best;
-  });
+      if (leftHasPercent !== rightHasPercent) {
+        return leftHasPercent ? -1 : 1;
+      }
+      return right.absoluteGrowth - left.absoluteGrowth;
+    })
+    .slice(0, limit);
+}
+
+/**
+ * Category with the largest growth vs previous month.
+ * Prefers highest % among categories with previous spend > 0;
+ * otherwise falls back to largest absolute increase.
+ */
+export function getFastestGrowingCategory(
+  transactions: Transaction[],
+  categories: Category[],
+  monthKey: string,
+): CategoryGrowthInsight | null {
+  const ranks = rankCategoryGrowth(transactions, categories, monthKey, 1);
+  return ranks[0] ?? null;
 }
 
 export type BudgetAlertLevel = "warning" | "exceeded";
