@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./scripts/ts-resolve.mjs --experimental-strip-types --test src/lib/*.test.ts"
   },
   "dependencies": {
     "date-fns": "^4.4.0",

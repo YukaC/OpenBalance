@@ -1,0 +1,4 @@
+# pnpm 11: approve native postinstall scripts required by Next.js
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
