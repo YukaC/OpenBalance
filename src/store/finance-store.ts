@@ -48,12 +48,14 @@ interface FinanceState {
   viewMode: ViewMode;
   isFormOpen: boolean;
   formPrefillType: TransactionType;
+  editingTransactionId: string | null;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
   setSelectedMonth: (monthKey: string) => void;
   setSelectedWeekIso: (weekIso: string | null) => void;
   setViewMode: (mode: ViewMode) => void;
   openForm: (type?: TransactionType) => void;
+  openFormForEdit: (transactionId: string) => void;
   closeForm: () => void;
   addTransaction: (input: NewTransactionInput) => void;
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
@@ -91,6 +93,7 @@ export const useFinanceStore = create<FinanceState>()(
       viewMode: "mes",
       isFormOpen: false,
       formPrefillType: "ingreso",
+      editingTransactionId: null,
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
       setSelectedMonth: (monthKey) =>
@@ -98,8 +101,24 @@ export const useFinanceStore = create<FinanceState>()(
       setSelectedWeekIso: (weekIso) => set({ selectedWeekIso: weekIso }),
       setViewMode: (mode) => set({ viewMode: mode }),
       openForm: (type = "gasto") =>
-        set({ isFormOpen: true, formPrefillType: type }),
-      closeForm: () => set({ isFormOpen: false }),
+        set({
+          isFormOpen: true,
+          formPrefillType: type,
+          editingTransactionId: null,
+        }),
+      openFormForEdit: (transactionId) => {
+        const transaction = get().transactions.find(
+          (item) => item.id === transactionId,
+        );
+        if (!transaction) return;
+        set({
+          isFormOpen: true,
+          editingTransactionId: transactionId,
+          formPrefillType: transaction.type,
+        });
+      },
+      closeForm: () =>
+        set({ isFormOpen: false, editingTransactionId: null }),
       addTransaction: (input) => {
         const suggestion =
           input.type === "gasto"

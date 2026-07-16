@@ -20,8 +20,10 @@ const REFERENCE_TODAY_ISO = format(REFERENCE_TODAY, "yyyy-MM-dd");
 
 export function TransactionForm() {
   const formPrefillType = useFinanceStore((s) => s.formPrefillType);
+  const editingTransactionId = useFinanceStore((s) => s.editingTransactionId);
   const closeForm = useFinanceStore((s) => s.closeForm);
   const addTransaction = useFinanceStore((s) => s.addTransaction);
+  const updateTransaction = useFinanceStore((s) => s.updateTransaction);
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const transactions = useFinanceStore((s) => s.transactions);
@@ -31,6 +33,7 @@ export function TransactionForm() {
   );
   const updateIncomeSource = useFinanceStore((s) => s.updateIncomeSource);
 
+  const isEditing = Boolean(editingTransactionId);
   const panelRef = useRef<HTMLDivElement>(null);
   const [type, setType] = useState<TransactionType>(formPrefillType);
   const [amount, setAmount] = useState("");
@@ -54,8 +57,33 @@ export function TransactionForm() {
   const [didMarkRecurring, setDidMarkRecurring] = useState(false);
 
   useEffect(() => {
+    if (editingTransactionId) return;
     setType(formPrefillType);
-  }, [formPrefillType]);
+  }, [formPrefillType, editingTransactionId]);
+
+  useEffect(() => {
+    if (!editingTransactionId) return;
+    const { transactions: storeTransactions, incomeSources: storeIncomeSources } =
+      useFinanceStore.getState();
+    const transaction = storeTransactions.find(
+      (item) => item.id === editingTransactionId,
+    );
+    if (!transaction) return;
+
+    setType(transaction.type);
+    setAmount(String(transaction.amount));
+    setDate(transaction.date);
+    setMethod(transaction.method);
+    setCategoryId(transaction.categoryId ?? "");
+    setIncomeSourceId(
+      transaction.incomeSourceId ?? storeIncomeSources[0]?.id ?? "",
+    );
+    setNote(transaction.note);
+    setTitle(transaction.title);
+    setHasManualCategoryOverride(Boolean(transaction.categoryId));
+    setAutoSuggested(transaction.isAutoCategorized);
+    setSuggestedCategoryId(transaction.categoryId);
+  }, [editingTransactionId]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -185,7 +213,7 @@ export function TransactionForm() {
       }
     }
 
-    addTransaction({
+    const payload = {
       type,
       amount: Math.round(amountNumber),
       date,
@@ -194,7 +222,20 @@ export function TransactionForm() {
       incomeSourceId: type === "ingreso" ? incomeSourceId || null : null,
       note: note.trim(),
       title: resolvedTitle,
-    });
+    };
+
+    if (editingTransactionId) {
+      updateTransaction(editingTransactionId, {
+        ...payload,
+        isAutoCategorized:
+          type === "gasto" &&
+          Boolean(categoryId) &&
+          categoryId === suggestedCategoryId &&
+          autoSuggested,
+      });
+    } else {
+      addTransaction(payload);
+    }
     requestClose();
   }
 
@@ -225,7 +266,7 @@ export function TransactionForm() {
             id="tx-form-title"
             className="font-display text-[20px] font-semibold text-[var(--ink)]"
           >
-            Nueva transacción
+            {isEditing ? "Editar movimiento" : "Nueva transacción"}
           </h2>
           <button
             type="button"
@@ -437,7 +478,11 @@ export function TransactionForm() {
             type="submit"
             className="mt-2 min-h-12 w-full rounded-xl bg-[var(--ink)] py-3.5 text-[14.5px] font-bold text-[var(--ink-contrast)] transition-soft hover:opacity-90 hover:shadow-[var(--shadow-sheet)] focus-visible:outline-none active:scale-[0.99]"
           >
-            {type === "ingreso" ? "Guardar ingreso" : "Guardar gasto"}
+            {isEditing
+              ? "Guardar"
+              : type === "ingreso"
+                ? "Guardar ingreso"
+                : "Guardar gasto"}
           </button>
         </form>
       </div>

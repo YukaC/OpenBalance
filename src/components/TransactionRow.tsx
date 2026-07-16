@@ -8,6 +8,7 @@ interface TransactionRowProps {
   category?: Category | null;
   incomeSourceName?: string | null;
   weekLabel?: string | null;
+  onSelect?: () => void;
 }
 
 function iconBackground(
@@ -25,6 +26,7 @@ export function TransactionRow({
   category,
   incomeSourceName,
   weekLabel,
+  onSelect,
 }: TransactionRowProps) {
   const isIncome = transaction.type === "ingreso";
   const icon = isIncome ? "💵" : (category?.icon ?? "•");
@@ -43,7 +45,24 @@ export function TransactionRow({
   if (transaction.isFixed) metaParts.push("fijo");
 
   return (
-    <article className="flex items-center gap-3 border-b border-[var(--line)] py-3 transition-soft last:border-b-0 hover:rounded-[10px] hover:bg-[var(--surface-raised)] hover:px-2 hover:-mx-2">
+    <article
+      className={`flex items-center gap-3 border-b border-[var(--line)] py-3 transition-soft last:border-b-0 hover:rounded-[10px] hover:bg-[var(--surface-raised)] hover:px-2 hover:-mx-2 ${
+        onSelect ? "cursor-pointer" : ""
+      }`}
+      onClick={onSelect}
+      onKeyDown={
+        onSelect
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect();
+              }
+            }
+          : undefined
+      }
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+    >
       <div
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[16px] leading-none transition-soft"
         style={{ background: iconBackground(isIncome, category?.color) }}

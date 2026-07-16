@@ -23,6 +23,7 @@ export default function TransaccionesView() {
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const deleteTransaction = useFinanceStore((s) => s.deleteTransaction);
   const openForm = useFinanceStore((s) => s.openForm);
+  const openFormForEdit = useFinanceStore((s) => s.openFormForEdit);
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
@@ -123,8 +124,12 @@ export default function TransaccionesView() {
                 ? incomeSourcesById.get(tx.incomeSourceId)
                 : undefined;
               return (
-                <div key={tx.id} className="flex items-stretch gap-1">
-                  <div className="min-w-0 flex-1">
+                <div
+                  key={tx.id}
+                  className="flex items-stretch gap-1"
+                  onClick={() => openFormForEdit(tx.id)}
+                >
+                  <div className="min-w-0 flex-1 cursor-pointer">
                     <TransactionRow
                       transaction={tx}
                       category={category}
@@ -134,7 +139,8 @@ export default function TransaccionesView() {
                   <button
                     type="button"
                     aria-label={`Eliminar ${tx.title}`}
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       if (
                         window.confirm(`¿Eliminar «${tx.title}»?`)
                       ) {

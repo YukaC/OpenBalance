@@ -19,6 +19,7 @@ export default function SemanasView() {
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const openForm = useFinanceStore((s) => s.openForm);
+  const openFormForEdit = useFinanceStore((s) => s.openFormForEdit);
   const updateIncomeSource = useFinanceStore((s) => s.updateIncomeSource);
   const setViewMode = useFinanceStore((s) => s.setViewMode);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
@@ -302,6 +303,7 @@ export default function SemanasView() {
                       transaction={tx}
                       category={category}
                       incomeSourceName={incomeSource?.name}
+                      onSelect={() => openFormForEdit(tx.id)}
                     />
                   );
                 })}
