@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { BudgetAlertBanner } from "@/components/BudgetAlertBanner";
 import { CategoryBreakdown } from "@/components/CategoryBreakdown";
+import { CategoryGrowthRanking } from "@/components/CategoryGrowthRanking";
 import { CategorySpendAlert } from "@/components/CategorySpendAlert";
 import { ExtraordinaryExpenseNote } from "@/components/ExtraordinaryExpenseNote";
 import { MonthBalance } from "@/components/MonthBalance";
@@ -20,6 +21,7 @@ import {
   findCategorySpendAlerts,
   getExtraordinaryExpense,
   getHormigaDrainAlert,
+  rankCategoryGrowth,
 } from "@/lib/summaries";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -61,6 +63,11 @@ export default function ResumenView() {
 
   const categorySpendAlerts = useMemo(
     () => findCategorySpendAlerts(transactions, categories, selectedMonth),
+    [transactions, categories, selectedMonth],
+  );
+
+  const categoryGrowthRanks = useMemo(
+    () => rankCategoryGrowth(transactions, categories, selectedMonth),
     [transactions, categories, selectedMonth],
   );
 
@@ -132,6 +139,7 @@ export default function ResumenView() {
           <CategoryBreakdown summary={summary} />
           <BudgetAlertBanner alerts={budgetAlerts} />
           <CategorySpendAlert alerts={categorySpendAlerts} />
+          <CategoryGrowthRanking ranks={categoryGrowthRanks} />
           <ExtraordinaryExpenseNote
             expense={extraordinaryExpense}
             hormigaDrain={hormigaDrain}
