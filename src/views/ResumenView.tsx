@@ -27,6 +27,7 @@ export default function ResumenView() {
   const transactions = useFinanceStore((s) => s.transactions);
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
+  const openFormForEdit = useFinanceStore((s) => s.openFormForEdit);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
 
   const summary = useMemo(
@@ -142,6 +143,7 @@ export default function ResumenView() {
                     transaction={tx}
                     category={category}
                     incomeSourceName={incomeSource?.name}
+                    onSelect={() => openFormForEdit(tx.id)}
                   />
                 );
               })}
