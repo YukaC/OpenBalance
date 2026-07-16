@@ -4,49 +4,79 @@ App de finanzas personales pensada para quien cobra **por semana** y decide **po
 
 Cargá ingresos y gastos con poca fricción, clasificá por keywords y mirá el resumen del mes en segundos.
 
-## Stack (MVP)
+## Stack
 
 - **Next.js 15** (App Router) + TypeScript + Tailwind CSS 4
-- **Zustand** (estado + persistencia en el navegador)
-- Clasificador de gastos por keywords (reglas)
-- Shell PWA liviano (`manifest.webmanifest`) para instalar como app
+- **Zustand** (estado local + `localStorage`, local-first)
+- **Auth.js** (email/contraseña) + **Drizzle** + **Postgres** (Neon) para sync ocasional multiusuario
+- **Capacitor** (opcional) para empaquetar Android/iOS
+- Shell PWA (`manifest.webmanifest`)
 
-## Local-first
+## Modos de uso
 
-Rinde corre **sin backend**: los datos viven en el navegador (Zustand + `localStorage`). No hace falta cuenta ni servidor para usar el MVP.
+| Modo | Cómo | Datos |
+|------|------|--------|
+| Local-first (default) | Sin `NEXT_PUBLIC_AUTH_ENABLED` | Solo navegador |
+| Con cuenta + sync | `DATABASE_URL` + auth env + `NEXT_PUBLIC_AUTH_ENABLED=true` | Local + Postgres (push/pull) |
+
+La lógica de cálculo vive en el cliente (`src/lib`). El backend es un almacén (CRUD/sync), no recalcula balances.
 
 ## Scripts
 
 ```bash
-npm install   # o npm ci en CI
-npm run dev   # desarrollo en http://localhost:3000
-npm run build # build de producción
-npm run lint  # ESLint
+npm install
+npm run dev          # http://localhost:3000
+npm run build        # producción web (Vercel)
+npm run lint
+npm run typecheck
+npm test
+
+# Database (requires DATABASE_URL in .env.local)
+npm run db:push      # apply schema to Neon (dev)
+npm run db:generate  # SQL migrations under ./drizzle
+npm run db:migrate
+
+# Mobile
+npm run build:mobile
+npm run cap:sync
 ```
 
-Typecheck (sin script npm dedicado):
+## Setup rápido (local + Neon)
+
+Ver la guía completa: **[docs/DEPLOY.md](./docs/DEPLOY.md)**.
+
+Resumen:
 
 ```bash
-npx tsc --noEmit
+cp .env.example .env.local
+# DATABASE_URL (Neon pooled), AUTH_SECRET, AUTH_URL=http://localhost:3000
+# NEXT_PUBLIC_AUTH_ENABLED=true
+
+npm run db:push
+npm run dev
 ```
 
 ## Pantallas
 
 | Ruta | Qué hace |
-|---|---|
-| `/` | Resumen del mes: balance, semanas, categorías, últimos movimientos |
-| `/semanas` | Vista semanal + CTA de ingreso |
+|------|----------|
+| `/` | Resumen del mes: balance, semanas de cobro, movimientos de la semana |
 | `/transacciones` | Listado filtrable |
-| `/categorias` | Categorías y keywords del clasificador |
-| `/configuracion` | Perfil (nombre/email), día de cobro, PIN opcional, export CSV, reset demo |
+| `/categorias` | Categorías, keywords y presupuestos |
+| `/configuracion` | Perfil, cuentas, cobro, PIN, sync, backup/CSV, descargar app (mobile web) |
+
+La ruta `/semanas` redirige a `/` (unificada en el resumen).
 
 ## Modelo
 
-Cada transacción guarda fecha real y campos derivados `semana_iso` / `mes` para resumir con el mismo dataset.
+Cada transacción guarda fecha real y campos derivados (`weekIso`, `month`). Los totales del mes usan **semanas de pago** (día de cobro configurable), no solo el mes calendario.
 
-Primera visita: onboarding local (nombre, email, cobro, moneda). El seed demo (Mariano J., julio 2026, `isSetupComplete: true`) se carga con **Restablecer datos demo** y no vuelve a pedir onboarding. PIN opcional en Configuración (hash local `rinde-lock`).
+Onboarding local en la primera visita. PIN opcional (hash local). Con auth activado: registro/login antes de usar sync.
 
 ## Documentación
 
-- [implementacion.md](./implementacion.md) — plan de implementación original
-- [analisis.md](./analisis.md) — análisis y decisiones del producto
+- [docs/DEPLOY.md](./docs/DEPLOY.md) — Neon, Auth.js, Vercel, env vars
+- [docs/MOBILE.md](./docs/MOBILE.md) — Capacitor / static export
+- [AuditLogic.md](./AuditLogic.md) — auditoría de lógica de cálculo
+- [implementacion.md](./implementacion.md) — plan original
+- [analisis.md](./analisis.md) — análisis de producto
