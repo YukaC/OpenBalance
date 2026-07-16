@@ -60,6 +60,7 @@ export function TransactionForm() {
   const [isRecurringHintDismissed, setIsRecurringHintDismissed] =
     useState(false);
   const [didMarkRecurring, setDidMarkRecurring] = useState(false);
+  const [isFixed, setIsFixed] = useState(false);
 
   useEffect(() => {
     if (editingTransactionId) return;
@@ -100,6 +101,7 @@ export function TransactionForm() {
     );
     setNote(transaction.note);
     setTitle(transaction.title);
+    setIsFixed(Boolean(transaction.isFixed));
     setHasManualCategoryOverride(Boolean(transaction.categoryId));
     setAutoSuggested(transaction.isAutoCategorized);
     setSuggestedCategoryId(transaction.categoryId);
@@ -144,6 +146,7 @@ export function TransactionForm() {
       setSuggestedCategoryId(null);
       setAutoSuggested(false);
       setHasManualCategoryOverride(false);
+      setIsFixed(false);
       return;
     }
     const text = `${title} ${note}`.trim();
@@ -243,6 +246,7 @@ export function TransactionForm() {
       accountId: accountId || null,
       note: note.trim(),
       title: resolvedTitle,
+      isFixed: type === "gasto" ? isFixed : false,
     };
 
     if (editingTransactionId) {
@@ -470,6 +474,30 @@ export function TransactionForm() {
               </select>
             </label>
           )}
+
+          {type === "gasto" ? (
+            <label
+              htmlFor="tx-is-fixed"
+              className="mb-3.5 flex cursor-pointer items-start gap-3 rounded-[10px] border border-[var(--line)] bg-[var(--bg)] px-3 py-2.5"
+            >
+              <input
+                id="tx-is-fixed"
+                name="isFixed"
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-[var(--ink)]"
+                checked={isFixed}
+                onChange={(e) => setIsFixed(e.target.checked)}
+              />
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-semibold text-[var(--ink)]">
+                  Gasto fijo (se repite cada mes)
+                </span>
+                <span className="mt-0.5 block text-[12px] text-[var(--ink-soft)]">
+                  El resumen lo diferencia de los gastos variables.
+                </span>
+              </span>
+            </label>
+          ) : null}
 
           {showRecurringHint && recurringSuggestion ? (
             <div className="mb-3.5 -mt-1.5 rounded-lg bg-[var(--gold-soft)] px-2.5 py-2 text-[11.5px] text-[var(--gold)]">
