@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - feat/**
       - cursor/**
   pull_request:
     branches:
       - main
+      - feat/**
       - cursor/**
 
 jobs:
@@ -17,27 +19,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: pnpm typecheck
         env:
-          # Stubs so Auth.js / Drizzle imports typecheck without a live DB
           AUTH_SECRET: ci-typecheck-secret-not-for-production
           DATABASE_URL: ""
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Build
-        run: npm run build
+        run: pnpm build
         env:
           AUTH_SECRET: ci-build-secret-not-for-production
           DATABASE_URL: ""

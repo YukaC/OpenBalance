@@ -1,4 +1,5 @@
-# pnpm 11: approve native postinstall scripts required by Next.js
+# pnpm 11: approve native postinstall scripts required by Next.js / drizzle-kit
 allowBuilds:
+  esbuild: true
   sharp: true
   unrs-resolver: true
