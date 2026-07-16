@@ -13,6 +13,7 @@ import {
 } from "@/lib/section-nav";
 import { useFinanceStore } from "@/store/finance-store";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
+import { PaydayLoadBanner } from "@/components/PaydayLoadBanner";
 import { PinUnlockScreen } from "@/components/PinUnlockScreen";
 import { TransactionForm } from "@/components/TransactionForm";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -353,6 +354,7 @@ export function AppShell(_props: { children: React.ReactNode }) {
           </header>
 
           <main className="section-main flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-[var(--page-pad-x)] pt-[var(--page-pad-y)] pb-[calc(var(--fab-clearance)+8px)] min-[880px]:px-10 min-[880px]:pt-8 min-[880px]:pb-10">
+            <PaydayLoadBanner />
             {renderActiveSection(section)}
           </main>
         </div>

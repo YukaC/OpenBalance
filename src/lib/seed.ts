@@ -16,7 +16,8 @@ export const DEFAULT_PROFILE: UserProfile = {
   initials: "MJ",
   /** Demo seed skips onboarding; "Restablecer datos demo" restores this. */
   isSetupComplete: true,
-}
+  shouldRemindPaydayLoad: false,
+};
 
 export const DEFAULT_CATEGORIES: Category[] = [
   {
@@ -365,6 +366,33 @@ export const SEED_TRANSACTIONS: Transaction[] = [
     note: "Bares",
     title: "Salidas junio",
     isAutoCategorized: false,
+    isFixed: false,
+  }),
+  // Recurring-but-not-fixed demo pair (Fase 2 suggestion card)
+  tx({
+    id: "tx-jun-netflix",
+    type: "gasto",
+    amount: 8900,
+    date: "2026-06-08",
+    method: "tarjeta_debito",
+    categoryId: "cat-servicios",
+    incomeSourceId: null,
+    note: "Suscripción",
+    title: "Netflix",
+    isAutoCategorized: true,
+    isFixed: false,
+  }),
+  tx({
+    id: "tx-jul-netflix",
+    type: "gasto",
+    amount: 8900,
+    date: "2026-07-08",
+    method: "tarjeta_debito",
+    categoryId: "cat-servicios",
+    incomeSourceId: null,
+    note: "Suscripción",
+    title: "Netflix",
+    isAutoCategorized: true,
     isFixed: false,
   }),
 ];

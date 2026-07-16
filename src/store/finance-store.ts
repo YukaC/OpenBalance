@@ -32,6 +32,7 @@ const BLANK_PROFILE: UserProfile = {
   paydayWeekday: "viernes",
   initials: "??",
   isSetupComplete: false,
+  shouldRemindPaydayLoad: false,
 };
 
 export type ViewMode = "mes" | "semana";
@@ -302,6 +303,13 @@ export const useFinanceStore = create<FinanceState>()(
             const nextColor = defaultColorById.get(category.id);
             return nextColor ? { ...category, color: nextColor } : category;
           });
+
+          if (state.profile.shouldRemindPaydayLoad === undefined) {
+            state.profile = {
+              ...state.profile,
+              shouldRemindPaydayLoad: false,
+            };
+          }
 
           state.setHydrated(true);
         }

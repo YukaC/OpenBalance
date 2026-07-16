@@ -58,6 +58,9 @@ export default function ConfiguracionView() {
   const [pinMessage, setPinMessage] = useState("");
   const [pinError, setPinError] = useState("");
   const [isSavingPin, setIsSavingPin] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<
+    NotificationPermission | "unsupported"
+  >("unsupported");
 
   useEffect(() => {
     setName(profile.name);
@@ -71,6 +74,14 @@ export default function ConfiguracionView() {
     if (!hydrated) return;
     setPinEnabled(isPinEnabled());
   }, [hydrated]);
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") {
+      setNotificationPermission("unsupported");
+      return;
+    }
+    setNotificationPermission(Notification.permission);
+  }, [profile.shouldRemindPaydayLoad]);
 
   if (!hydrated) {
     return (
@@ -472,6 +483,54 @@ export default function ConfiguracionView() {
             </button>
           ) : null}
         </div>
+      </section>
+
+      <section
+        className="space-y-3 rounded-[18px] bg-[var(--card)] p-[22px] shadow-[var(--shadow-card)] ring-1 ring-[var(--line)]"
+        aria-labelledby="reminders-heading"
+      >
+        <h2
+          id="reminders-heading"
+          className="font-display text-[16.5px] font-semibold text-[var(--ink)]"
+        >
+          Recordatorios
+        </h2>
+        <p className="text-[13px] text-[var(--ink-soft)]">
+          Si abrís Rinde el día de cobro y todavía no cargaste el ingreso de la
+          semana, te mostramos un aviso. Con permiso del navegador también
+          podés recibir una notificación.
+        </p>
+        <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--bg)] px-3.5 py-3">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 accent-[var(--ink)]"
+            checked={Boolean(profile.shouldRemindPaydayLoad)}
+            onChange={async (event) => {
+              const nextEnabled = event.target.checked;
+              if (nextEnabled && typeof Notification !== "undefined") {
+                if (Notification.permission === "default") {
+                  const permission = await Notification.requestPermission();
+                  setNotificationPermission(permission);
+                } else {
+                  setNotificationPermission(Notification.permission);
+                }
+              }
+              updateProfile({ shouldRemindPaydayLoad: nextEnabled });
+            }}
+          />
+          <span className="min-w-0">
+            <span className="block text-[14px] font-semibold text-[var(--ink)]">
+              Recordarme cargar el día de cobro
+            </span>
+            <span className="mt-0.5 block text-[12.5px] text-[var(--ink-soft)]">
+              {notificationPermission === "granted"
+                ? "Notificaciones del navegador activas."
+                : notificationPermission === "denied"
+                  ? "El navegador bloqueó notificaciones; el aviso en la app sigue disponible."
+                  : "Al activarlo podemos pedir permiso de notificación."}
+            </span>
+          </span>
+        </label>
       </section>
 
       <section

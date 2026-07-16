@@ -31,6 +31,8 @@ export interface UserProfile {
   initials: string;
   /** False/undefined until first-run onboarding finishes. Seed demo sets true. */
   isSetupComplete?: boolean;
+  /** Remind to load income on payday (in-app + optional Web Notification). */
+  shouldRemindPaydayLoad: boolean;
 }
 
 export interface IncomeSource {
