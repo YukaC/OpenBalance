@@ -7,9 +7,10 @@ import { ViewSkeleton } from "@/components/ViewSkeleton";
 import { DEFAULT_CATEGORY_EMOJI } from "@/lib/category-emojis";
 import { sanitizeCssColor } from "@/lib/color-utils";
 import { formatMonthName } from "@/lib/dates";
+import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { formatMoney, parseMoneyInput } from "@/lib/format";
-import { filterByMonth } from "@/lib/summaries";
+import { sumExpenseByCategory } from "@/lib/summaries";
 import type { CategoryKind } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -41,6 +42,7 @@ export default function CategoriasView() {
   const addCategory = useFinanceStore((s) => s.addCategory);
   const setBudget = useFinanceStore((s) => s.setBudget);
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
+  const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
 
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(DEFAULT_CATEGORY_EMOJI);
@@ -61,28 +63,36 @@ export default function CategoriasView() {
     message: string;
   } | null>(null);
 
+  const activeCategories = useMemo(
+    () => categories.filter(isActive),
+    [categories],
+  );
+
   const budgetByCategoryId = useMemo(() => {
     const map = new Map<string, number>();
     for (const budget of budgets) {
+      if (!isActive(budget)) continue;
       if (budget.month !== selectedMonth) continue;
       map.set(budget.categoryId, budget.amountLimit);
     }
     return map;
   }, [budgets, selectedMonth]);
 
-  const spentByCategoryId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const tx of filterByMonth(transactions, selectedMonth, currency)) {
-      if (tx.type !== "gasto" || !tx.categoryId) continue;
-      map.set(tx.categoryId, (map.get(tx.categoryId) ?? 0) + tx.amount);
-    }
-    return map;
-  }, [transactions, selectedMonth, currency]);
+  const spentByCategoryId = useMemo(
+    () =>
+      sumExpenseByCategory(
+        transactions,
+        selectedMonth,
+        paydayWeekday,
+        currency,
+      ),
+    [transactions, selectedMonth, paydayWeekday, currency],
+  );
 
   const transactionCountByCategoryId = useMemo(() => {
     const map = new Map<string, number>();
     for (const tx of transactions) {
-      if (!tx.categoryId) continue;
+      if (!isActive(tx) || !tx.categoryId) continue;
       map.set(tx.categoryId, (map.get(tx.categoryId) ?? 0) + 1);
     }
     return map;
@@ -212,7 +222,7 @@ export default function CategoriasView() {
         aria-label="Lista de categorías"
       >
         <div aria-label="Categorías guardadas">
-          {categories.map((category) => {
+          {activeCategories.map((category) => {
             const isEditingIcon = editingIconCategoryId === category.id;
             return (
               <article
@@ -345,7 +355,7 @@ export default function CategoriasView() {
           </p>
         </div>
         <div className="space-y-2">
-          {categories.map((category) => {
+          {activeCategories.map((category) => {
             const limit = budgetByCategoryId.get(category.id);
             const spent = spentByCategoryId.get(category.id) ?? 0;
             return (

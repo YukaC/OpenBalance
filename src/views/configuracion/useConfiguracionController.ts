@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { downloadJsonFile, parseFinanceBackup } from "@/lib/backup";
 import { parseTransactionsCsv } from "@/lib/csv-io";
+import { isActive } from "@/lib/entity-lifecycle";
 import type { CurrencyCode } from "@/lib/format";
 import { METHOD_LABELS } from "@/lib/format";
 import {
@@ -128,6 +129,7 @@ export function useConfiguracionController() {
       "semana",
     ];
     const rows = [...transactions]
+      .filter(isActive)
       .sort((a, b) => b.date.localeCompare(a.date))
       .map((tx) =>
         [
@@ -227,7 +229,7 @@ export function useConfiguracionController() {
 
   function handleRemoveAccount(accountId: string, accountName: string) {
     const transactionCount = transactions.filter(
-      (tx) => tx.accountId === accountId,
+      (tx) => isActive(tx) && tx.accountId === accountId,
     ).length;
     setPendingConfirm({
       kind: "removeAccount",
@@ -361,7 +363,7 @@ export function useConfiguracionController() {
   return {
     hydrated,
     profile,
-    accounts,
+    accounts: accounts.filter(isActive),
     name,
     setName,
     email,

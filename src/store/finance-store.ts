@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { FinanceBackupPayload } from "@/lib/backup";
+import { BACKUP_VERSION, type FinanceBackupPayload } from "@/lib/backup";
 import { suggestCategoryId } from "@/lib/classifier";
 import { sanitizeCssColor } from "@/lib/color-utils";
 import {
@@ -13,6 +13,8 @@ import {
   toWeekIso,
   todayIso,
 } from "@/lib/dates";
+import { ensureLifecycle, isActive, touch } from "@/lib/entity-lifecycle";
+import { roundAmountForCurrency } from "@/lib/format";
 import {
   DEFAULT_ACCOUNTS,
   DEFAULT_CATEGORIES,
@@ -47,6 +49,8 @@ const BLANK_PROFILE: UserProfile = {
   isSetupComplete: false,
   defaultAccountId: "acc-principal",
   shouldRemindPaydayLoad: false,
+  updatedAt: new Date(0).toISOString(),
+  deletedAt: null,
 };
 
 export type ViewMode = "mes" | "semana";
@@ -75,7 +79,22 @@ interface NewTransactionInput {
   origin?: LoadOrigin;
 }
 
-function buildInstallmentAmounts(totalAmount: number, count: number): number[] {
+function buildInstallmentAmounts(
+  totalAmount: number,
+  count: number,
+  currency: "ARS" | "USD",
+): number[] {
+  if (currency === "USD") {
+    const totalCents = Math.round(totalAmount * 100);
+    const base = Math.floor(totalCents / count);
+    let remainder = totalCents - base * count;
+    return Array.from({ length: count }, () => {
+      const cents = base + (remainder > 0 ? 1 : 0);
+      if (remainder > 0) remainder -= 1;
+      return cents / 100;
+    });
+  }
+
   const base = Math.floor(totalAmount / count);
   let remainder = totalAmount - base * count;
   return Array.from({ length: count }, () => {
@@ -101,6 +120,8 @@ interface FinanceState {
   formPrefillDate: string | null;
   editingTransactionId: string | null;
   hydrated: boolean;
+  /** Last successful remote sync timestamp; null until sync lands. */
+  lastSyncedAt: string | null;
   setHydrated: (value: boolean) => void;
   setSelectedMonth: (monthKey: string) => void;
   setSelectedWeekIso: (weekIso: string | null) => void;
@@ -117,7 +138,7 @@ interface FinanceState {
     id: string,
     options?: { deleteInstallmentGroup?: boolean },
   ) => void;
-  /** Remove duplicate ids / identical payload clones from the ledger. */
+  /** Remove duplicate ids from the ledger (structural safety net). */
   repairTransactions: () => void;
   restoreTransactions: (transactions: Transaction[]) => void;
   addCategory: (category: Omit<Category, "id">) => void;
@@ -181,29 +202,6 @@ function dedupeTransactionsById(transactions: Transaction[]): Transaction[] {
   return unique;
 }
 
-/** Keep first of each identical payload (newest-first store order). */
-function dedupeIdenticalPayloadTransactions(
-  transactions: Transaction[],
-): Transaction[] {
-  const seenPayloads = new Set<string>();
-  const unique: Transaction[] = [];
-  for (const transaction of transactions) {
-    const payloadKey = transactionPayloadKey(transaction);
-    if (seenPayloads.has(payloadKey)) continue;
-    seenPayloads.add(payloadKey);
-    unique.push(transaction);
-  }
-  return unique;
-}
-
-function sanitizeStoredTransactions(
-  transactions: Transaction[],
-): Transaction[] {
-  return dedupeIdenticalPayloadTransactions(
-    dedupeTransactionsById(transactions),
-  );
-}
-
 function isSameTransactionPayload(
   existing: Transaction,
   candidate: {
@@ -226,13 +224,31 @@ function resolveDefaultAccountId(
   profile: UserProfile,
   accounts: Account[],
 ): string | null {
+  const activeAccounts = accounts.filter(isActive);
   if (
     profile.defaultAccountId &&
-    accounts.some((account) => account.id === profile.defaultAccountId)
+    activeAccounts.some((account) => account.id === profile.defaultAccountId)
   ) {
     return profile.defaultAccountId;
   }
-  return accounts[0]?.id ?? null;
+  return activeAccounts[0]?.id ?? null;
+}
+
+function softDeleteById<T extends { id: string; deletedAt?: string | null }>(
+  items: T[],
+  id: string,
+  nowIso: string,
+): T[] {
+  return items.map((item) =>
+    item.id === id ? touch({ ...item, deletedAt: nowIso }) : item,
+  );
+}
+
+function migrateEntitiesForSync<T extends { updatedAt?: string; deletedAt?: string | null }>(
+  entities: T[],
+  nowIso: string,
+): T[] {
+  return entities.map((entity) => ensureLifecycle(entity, nowIso));
 }
 
 export const useFinanceStore = create<FinanceState>()(
@@ -253,6 +269,7 @@ export const useFinanceStore = create<FinanceState>()(
       formPrefillDate: null,
       editingTransactionId: null,
       hydrated: false,
+      lastSyncedAt: null,
       setHydrated: (value) => set({ hydrated: value }),
       setSelectedMonth: (monthKey) =>
         set({ selectedMonth: monthKey, selectedWeekIso: null }),
@@ -267,7 +284,7 @@ export const useFinanceStore = create<FinanceState>()(
         }),
       openFormForEdit: (transactionId) => {
         const transaction = get().transactions.find(
-          (item) => item.id === transactionId,
+          (item) => item.id === transactionId && isActive(item),
         );
         if (!transaction) return;
         set({
@@ -288,8 +305,8 @@ export const useFinanceStore = create<FinanceState>()(
           input.type === "gasto" && !input.categoryId
             ? suggestCategoryId(
                 `${input.title} ${input.note}`,
-                get().categories,
-                get().userRules,
+                get().categories.filter(isActive),
+                get().userRules.filter(isActive),
               )
             : { categoryId: null, isAuto: false };
 
@@ -316,7 +333,7 @@ export const useFinanceStore = create<FinanceState>()(
           ? Math.max(1, Math.min(24, Math.round(input.installmentCount)))
           : 1;
         const startDate = input.date || todayIso();
-        const totalAmount = Math.round(input.amount);
+        const totalAmount = roundAmountForCurrency(input.amount, currency);
         const fixedPayWeekIndex = isFixed
           ? Math.max(
               1,
@@ -334,7 +351,7 @@ export const useFinanceStore = create<FinanceState>()(
           : undefined;
 
         if (installmentCount === 1) {
-          const transaction: Transaction = {
+          const transaction = touch({
             id: createId("tx"),
             type: input.type,
             amount: totalAmount,
@@ -352,10 +369,11 @@ export const useFinanceStore = create<FinanceState>()(
             origin,
             isAutoCategorized,
             isFixed,
+            deletedAt: null,
             ...(fixedPayWeekIndex != null ? { fixedPayWeekIndex } : {}),
-          };
+          });
 
-          const latestTransaction = get().transactions[0];
+          const latestTransaction = get().transactions.find(isActive);
           if (
             latestTransaction &&
             isSameTransactionPayload(latestTransaction, transaction)
@@ -365,7 +383,7 @@ export const useFinanceStore = create<FinanceState>()(
           }
 
           set((state) => ({
-            transactions: sanitizeStoredTransactions([
+            transactions: dedupeTransactionsById([
               transaction,
               ...state.transactions,
             ]),
@@ -374,12 +392,16 @@ export const useFinanceStore = create<FinanceState>()(
         }
 
         const groupId = createId("inst");
-        const amounts = buildInstallmentAmounts(totalAmount, installmentCount);
+        const amounts = buildInstallmentAmounts(
+          totalAmount,
+          installmentCount,
+          currency,
+        );
         const installmentTransactions: Transaction[] = amounts.map(
           (amount, index) => {
             const dateIso = shiftIsoDateByMonths(startDate, index);
             const installmentIndex = index + 1;
-            return {
+            return touch({
               id: createId("tx"),
               type: "gasto" as const,
               amount,
@@ -396,15 +418,16 @@ export const useFinanceStore = create<FinanceState>()(
               origin,
               isAutoCategorized,
               isFixed: false,
+              deletedAt: null,
               installmentGroupId: groupId,
               installmentIndex,
               installmentCount,
-            };
+            });
           },
         );
 
         set((state) => ({
-          transactions: sanitizeStoredTransactions([
+          transactions: dedupeTransactionsById([
             ...installmentTransactions,
             ...state.transactions,
           ]),
@@ -412,47 +435,49 @@ export const useFinanceStore = create<FinanceState>()(
       },
       updateTransaction: (id, patch) =>
         set((state) => ({
-          transactions: state.transactions.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  ...patch,
-                  weekIso: patch.date ? toWeekIso(patch.date) : item.weekIso,
-                  month: patch.date ? toMonthKey(patch.date) : item.month,
-                }
-              : item,
-          ),
+          transactions: state.transactions.map((item) => {
+            if (item.id !== id) return item;
+            const nextAmount =
+              patch.amount !== undefined
+                ? roundAmountForCurrency(
+                    patch.amount,
+                    patch.currency ?? item.currency,
+                  )
+                : item.amount;
+            return touch({
+              ...item,
+              ...patch,
+              amount: nextAmount,
+              weekIso: patch.date ? toWeekIso(patch.date) : item.weekIso,
+              month: patch.date ? toMonthKey(patch.date) : item.month,
+            });
+          }),
         })),
       deleteTransaction: (id, options) =>
         set((state) => {
           const target = state.transactions.find((item) => item.id === id);
-          if (!target) return state;
+          if (!target || !isActive(target)) return state;
+
+          const nowIso = new Date().toISOString();
 
           if (options?.deleteInstallmentGroup && target.installmentGroupId) {
             const groupId = target.installmentGroupId;
             return {
-              transactions: sanitizeStoredTransactions(
-                state.transactions.filter(
-                  (item) => item.installmentGroupId !== groupId,
-                ),
+              transactions: state.transactions.map((item) =>
+                item.installmentGroupId === groupId && isActive(item)
+                  ? touch({ ...item, deletedAt: nowIso })
+                  : item,
               ),
             };
           }
 
-          const payloadKey = transactionPayloadKey(target);
           return {
-            transactions: sanitizeStoredTransactions(
-              state.transactions.filter((item) => {
-                if (item.id === id) return false;
-                // Also drop ghost clones (same payload, different id).
-                return transactionPayloadKey(item) !== payloadKey;
-              }),
-            ),
+            transactions: softDeleteById(state.transactions, id, nowIso),
           };
         }),
       repairTransactions: () =>
         set((state) => ({
-          transactions: sanitizeStoredTransactions(state.transactions),
+          transactions: dedupeTransactionsById(state.transactions),
         })),
       restoreTransactions: (restored) =>
         set((state) => {
@@ -461,26 +486,30 @@ export const useFinanceStore = create<FinanceState>()(
           const withoutDuplicates = state.transactions.filter(
             (item) => !restoredIds.has(item.id),
           );
+          const revived = restored.map((item) =>
+            touch({ ...item, deletedAt: null }),
+          );
           return {
-            transactions: [...restored, ...withoutDuplicates],
+            transactions: [...revived, ...withoutDuplicates],
           };
         }),
       addCategory: (category) =>
         set((state) => ({
           categories: [
             ...state.categories,
-            {
+            touch({
               ...category,
               color: sanitizeCssColor(category.color),
               id: createId("cat"),
-            },
+              deletedAt: null,
+            }),
           ],
         })),
       updateCategory: (id, patch) =>
         set((state) => ({
           categories: state.categories.map((item) => {
             if (item.id !== id) return item;
-            const next = { ...item, ...patch };
+            const next = touch({ ...item, ...patch });
             if (patch.color !== undefined) {
               next.color = sanitizeCssColor(patch.color);
             }
@@ -488,28 +517,43 @@ export const useFinanceStore = create<FinanceState>()(
           }),
         })),
       removeCategory: (id) =>
-        set((state) => ({
-          categories: state.categories.filter((item) => item.id !== id),
-          transactions: state.transactions.map((tx) =>
-            tx.categoryId === id ? { ...tx, categoryId: null } : tx,
-          ),
-          budgets: state.budgets.filter((budget) => budget.categoryId !== id),
-          userRules: state.userRules.filter((rule) => rule.categoryId !== id),
-        })),
+        set((state) => {
+          const nowIso = new Date().toISOString();
+          return {
+            categories: softDeleteById(state.categories, id, nowIso),
+            transactions: state.transactions.map((tx) =>
+              tx.categoryId === id && isActive(tx)
+                ? touch({ ...tx, categoryId: null })
+                : tx,
+            ),
+            budgets: state.budgets.map((budget) =>
+              budget.categoryId === id && isActive(budget)
+                ? touch({ ...budget, deletedAt: nowIso })
+                : budget,
+            ),
+            userRules: state.userRules.map((rule) =>
+              rule.categoryId === id && isActive(rule)
+                ? touch({ ...rule, deletedAt: nowIso })
+                : rule,
+            ),
+          };
+        }),
       addIncomeSource: () => {
         // Income motives are fixed: Sueldo, Ingreso extra, Ahorro previo.
       },
       updateIncomeSource: (id, patch) =>
         set((state) => ({
           incomeSources: state.incomeSources.map((item) =>
-            item.id === id ? { ...item, ...patch } : item,
+            item.id === id ? touch({ ...item, ...patch }) : item,
           ),
         })),
       updateProfile: (patch) =>
-        set((state) => ({ profile: { ...state.profile, ...patch } })),
+        set((state) => ({
+          profile: touch({ ...state.profile, ...patch }),
+        })),
       setPayday: (weekday) =>
         set((state) => ({
-          profile: { ...state.profile, paydayWeekday: weekday },
+          profile: touch({ ...state.profile, paydayWeekday: weekday }),
           selectedWeekIso: null,
         })),
       setBudget: (categoryId, month, amountLimit) => {
@@ -517,21 +561,22 @@ export const useFinanceStore = create<FinanceState>()(
         set((state) => {
           const existing = state.budgets.find(
             (budget) =>
-              budget.categoryId === categoryId && budget.month === month,
+              isActive(budget) &&
+              budget.categoryId === categoryId &&
+              budget.month === month,
           );
+          const nowIso = new Date().toISOString();
           if (roundedLimit <= 0) {
+            if (!existing) return state;
             return {
-              budgets: state.budgets.filter(
-                (budget) =>
-                  !(budget.categoryId === categoryId && budget.month === month),
-              ),
+              budgets: softDeleteById(state.budgets, existing.id, nowIso),
             };
           }
           if (existing) {
             return {
               budgets: state.budgets.map((budget) =>
                 budget.id === existing.id
-                  ? { ...budget, amountLimit: roundedLimit }
+                  ? touch({ ...budget, amountLimit: roundedLimit })
                   : budget,
               ),
             };
@@ -539,31 +584,41 @@ export const useFinanceStore = create<FinanceState>()(
           return {
             budgets: [
               ...state.budgets,
-              {
+              touch({
                 id: createId("budget"),
                 categoryId,
                 month,
                 amountLimit: roundedLimit,
-              },
+                deletedAt: null,
+              }),
             ],
           };
         });
       },
       removeBudget: (id) =>
         set((state) => ({
-          budgets: state.budgets.filter((budget) => budget.id !== id),
+          budgets: softDeleteById(
+            state.budgets,
+            id,
+            new Date().toISOString(),
+          ),
         })),
       addAccount: (account) =>
         set((state) => {
-          const nextAccount: Account = {
+          const nextAccount = touch({
             ...account,
             id: createId("acc"),
-          };
+            deletedAt: null,
+          });
           const nextAccounts = [...state.accounts, nextAccount];
+          const activeCount = state.accounts.filter(isActive).length;
           const nextProfile =
-            state.profile.defaultAccountId || state.accounts.length > 0
+            state.profile.defaultAccountId || activeCount > 0
               ? state.profile
-              : { ...state.profile, defaultAccountId: nextAccount.id };
+              : touch({
+                  ...state.profile,
+                  defaultAccountId: nextAccount.id,
+                });
           return {
             accounts: nextAccounts,
             profile: nextProfile,
@@ -572,52 +627,61 @@ export const useFinanceStore = create<FinanceState>()(
       updateAccount: (id, patch) =>
         set((state) => ({
           accounts: state.accounts.map((account) =>
-            account.id === id ? { ...account, ...patch } : account,
+            account.id === id ? touch({ ...account, ...patch }) : account,
           ),
         })),
       removeAccount: (id) =>
         set((state) => {
-          if (state.accounts.length <= 1) return state;
-          const nextAccounts = state.accounts.filter(
-            (account) => account.id !== id,
-          );
+          const activeAccounts = state.accounts.filter(isActive);
+          if (activeAccounts.length <= 1) return state;
+          const nowIso = new Date().toISOString();
+          const nextAccounts = softDeleteById(state.accounts, id, nowIso);
+          const nextActive = nextAccounts.filter(isActive);
           const nextDefault =
             state.profile.defaultAccountId === id
-              ? nextAccounts[0]?.id
+              ? nextActive[0]?.id
               : state.profile.defaultAccountId;
           return {
             accounts: nextAccounts,
-            profile: {
+            profile: touch({
               ...state.profile,
               defaultAccountId: nextDefault,
-            },
+            }),
           };
         }),
       rememberCategoryCorrection: (pattern, categoryId) => {
         const normalized = pattern.trim().toLowerCase();
         if (!normalized) return;
         set((state) => {
-          const without = state.userRules.filter(
-            (rule) => rule.pattern.toLowerCase() !== normalized,
+          const nowIso = new Date().toISOString();
+          const without = state.userRules.map((rule) =>
+            rule.pattern.toLowerCase() === normalized && isActive(rule)
+              ? touch({ ...rule, deletedAt: nowIso })
+              : rule,
           );
           return {
             userRules: [
-              {
+              touch({
                 id: createId("rule"),
                 pattern: normalized,
                 categoryId,
-              },
+                deletedAt: null,
+              }),
               ...without,
             ],
           };
         });
       },
       suggestCategory: (text) =>
-        suggestCategoryId(text, get().categories, get().userRules),
+        suggestCategoryId(
+          text,
+          get().categories.filter(isActive),
+          get().userRules.filter(isActive),
+        ),
       exportBackup: () => {
         const state = get();
         return {
-          version: 1 as const,
+          version: BACKUP_VERSION,
           exportedAt: new Date().toISOString(),
           profile: state.profile,
           categories: state.categories,
@@ -628,62 +692,81 @@ export const useFinanceStore = create<FinanceState>()(
           accounts: state.accounts,
           selectedMonth: state.selectedMonth,
           viewMode: state.viewMode,
+          lastSyncedAt: state.lastSyncedAt,
         };
       },
       restoreBackup: (payload) => {
+        const nowIso = new Date().toISOString();
         const accounts =
-          payload.accounts.length > 0 ? payload.accounts : DEFAULT_ACCOUNTS;
-        const profile = {
-          ...payload.profile,
-          defaultAccountId:
-            payload.profile.defaultAccountId ?? accounts[0]?.id,
-        };
+          payload.accounts.length > 0
+            ? migrateEntitiesForSync(payload.accounts, nowIso)
+            : DEFAULT_ACCOUNTS;
+        const profile = ensureLifecycle(
+          {
+            ...payload.profile,
+            defaultAccountId:
+              payload.profile.defaultAccountId ?? accounts[0]?.id,
+          },
+          nowIso,
+        );
         const normalized = normalizeIncomeSources(
           payload.incomeSources,
           payload.transactions,
         );
         set({
           profile,
-          categories: payload.categories,
-          incomeSources: normalized.incomeSources,
-          transactions: sanitizeStoredTransactions(normalized.transactions),
-          userRules: payload.userRules,
-          budgets: payload.budgets ?? [],
+          categories: migrateEntitiesForSync(payload.categories, nowIso),
+          incomeSources: migrateEntitiesForSync(
+            normalized.incomeSources,
+            nowIso,
+          ),
+          transactions: dedupeTransactionsById(
+            migrateEntitiesForSync(normalized.transactions, nowIso),
+          ),
+          userRules: migrateEntitiesForSync(payload.userRules, nowIso),
+          budgets: migrateEntitiesForSync(payload.budgets ?? [], nowIso),
           accounts,
           selectedMonth: payload.selectedMonth ?? get().selectedMonth,
           viewMode: payload.viewMode ?? get().viewMode,
+          lastSyncedAt: payload.lastSyncedAt ?? null,
           selectedWeekIso: null,
           isFormOpen: false,
           editingTransactionId: null,
         });
       },
-      resetToSeed: () =>
+      resetToSeed: () => {
+        const nowIso = new Date().toISOString();
         set({
-          profile: DEFAULT_PROFILE,
-          categories: DEFAULT_CATEGORIES,
-          incomeSources: DEFAULT_INCOME_SOURCES,
-          transactions: SEED_TRANSACTIONS,
-          userRules: DEFAULT_USER_RULES,
+          profile: ensureLifecycle({ ...DEFAULT_PROFILE }, nowIso),
+          categories: migrateEntitiesForSync(DEFAULT_CATEGORIES, nowIso),
+          incomeSources: migrateEntitiesForSync(DEFAULT_INCOME_SOURCES, nowIso),
+          transactions: migrateEntitiesForSync(SEED_TRANSACTIONS, nowIso),
+          userRules: migrateEntitiesForSync(DEFAULT_USER_RULES, nowIso),
           budgets: [],
-          accounts: DEFAULT_ACCOUNTS,
+          accounts: migrateEntitiesForSync(DEFAULT_ACCOUNTS, nowIso),
           selectedMonth: toMonthKey(getAppToday()),
-        }),
+          lastSyncedAt: null,
+        });
+      },
     }),
     {
-      name: "rinde-finance-v2",
+      name: "rinde-finance-v3",
       partialize: (state) => ({
         profile: state.profile,
         categories: state.categories,
         incomeSources: state.incomeSources,
-        transactions: sanitizeStoredTransactions(state.transactions),
+        transactions: dedupeTransactionsById(state.transactions),
         userRules: state.userRules,
         budgets: state.budgets,
         accounts: state.accounts,
         selectedMonth: state.selectedMonth,
         viewMode: state.viewMode,
+        lastSyncedAt: state.lastSyncedAt,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+
+        const nowIso = new Date().toISOString();
 
         // Legacy installs (pre–isSetupComplete): keep using the app without onboarding.
         if (state.profile.isSetupComplete === undefined) {
@@ -700,37 +783,54 @@ export const useFinanceStore = create<FinanceState>()(
           state.incomeSources,
           state.transactions,
         );
-        state.incomeSources = normalized.incomeSources;
-        state.transactions = sanitizeStoredTransactions(
-          normalized.transactions,
+        state.incomeSources = migrateEntitiesForSync(
+          normalized.incomeSources,
+          nowIso,
+        );
+        state.transactions = dedupeTransactionsById(
+          migrateEntitiesForSync(normalized.transactions, nowIso),
         );
 
-        state.categories = state.categories.map((category) => ({
-          ...category,
-          color: sanitizeCssColor(category.color),
-        }));
+        state.profile = ensureLifecycle(state.profile, nowIso);
+        state.categories = migrateEntitiesForSync(state.categories, nowIso).map(
+          (category) => ({
+            ...category,
+            color: sanitizeCssColor(category.color),
+          }),
+        );
+        state.userRules = migrateEntitiesForSync(
+          state.userRules ?? [],
+          nowIso,
+        );
 
         if (!Array.isArray(state.budgets)) {
           state.budgets = [];
+        } else {
+          state.budgets = migrateEntitiesForSync(state.budgets, nowIso);
         }
         if (!Array.isArray(state.accounts) || state.accounts.length === 0) {
-          state.accounts = DEFAULT_ACCOUNTS;
+          state.accounts = migrateEntitiesForSync(DEFAULT_ACCOUNTS, nowIso);
+        } else {
+          state.accounts = migrateEntitiesForSync(state.accounts, nowIso);
+        }
+        if (state.lastSyncedAt === undefined) {
+          state.lastSyncedAt = null;
         }
         if (!state.profile.defaultAccountId) {
-          state.profile = {
+          state.profile = touch({
             ...state.profile,
-            defaultAccountId: state.accounts[0]?.id,
-          };
+            defaultAccountId: state.accounts.filter(isActive)[0]?.id,
+          });
         }
         if (state.profile.shouldRemindPaydayLoad === undefined) {
-          state.profile = {
+          state.profile = touch({
             ...state.profile,
             shouldRemindPaydayLoad: false,
-          };
+          });
         }
 
         const isFreshInstall =
-          state.transactions.length === 0 &&
+          state.transactions.filter(isActive).length === 0 &&
           !state.profile.isSetupComplete &&
           !state.profile.name.trim();
         const hasValidSelectedMonth = /^\d{4}-\d{2}$/.test(

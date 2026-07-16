@@ -1,5 +1,6 @@
 import { getDay, parseISO } from "date-fns";
-import { getPayWeekBounds, toWeekIso } from "./dates";
+import { getPayWeekBounds } from "./dates";
+import { isActive } from "./entity-lifecycle";
 import type { Transaction, Weekday } from "./types";
 
 const WEEKDAY_TO_NUMBER: Record<Weekday, number> = {
@@ -33,11 +34,10 @@ export function shouldShowPaydayLoadReminder(
   if (!isPaydayDate(referenceDate, paydayWeekday)) return false;
 
   const { start, end } = getPayWeekBounds(referenceDate, paydayWeekday);
-  const weekIso = toWeekIso(start);
 
   const hasIncomeThisWeek = transactions.some((item) => {
+    if (!isActive(item)) return false;
     if (item.type !== "ingreso") return false;
-    if (item.weekIso === weekIso) return true;
     const date = parseISO(item.date);
     return date >= start && date <= end;
   });

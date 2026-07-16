@@ -97,12 +97,8 @@ export function getPayWeekBounds(
 ): { start: Date; end: Date } {
   const paydayNumber = WEEKDAY_TO_NUMBER[paydayWeekday];
   const day = reference.getDay();
-  const daysSincePayday = (day - paydayNumber + 7) % 7;
   const daysUntilPayday = (paydayNumber - day + 7) % 7;
-  const end =
-    daysSincePayday === 0
-      ? startOfDay(reference)
-      : startOfDay(addDays(reference, daysUntilPayday));
+  const end = startOfDay(addDays(reference, daysUntilPayday));
   const start = startOfDay(addDays(end, -6));
   return { start, end };
 }

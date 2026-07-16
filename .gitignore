@@ -20,9 +20,20 @@
 # production
 /build
 
+# Capacitor native projects (generated via `npx cap add`)
+/android
+/ios
+/.capacitor
+
+# drizzle-kit local artifacts (commit generated SQL migrations under /drizzle when you use migrate)
+# Keep schema in src/db; ignore accidental kit caches only:
+.drizzle
+
 # misc
 .DS_Store
 *.pem
+*.log
+*.local
 
 # debug
 npm-debug.log*
@@ -30,8 +41,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — never commit secrets; keep the template
+.env
+.env.*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +52,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db

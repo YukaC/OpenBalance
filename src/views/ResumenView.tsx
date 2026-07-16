@@ -97,10 +97,14 @@ export default function ResumenView() {
 
   const hormigaDrain = useMemo(
     () =>
-      getHormigaDrainAlert(transactions, categories, selectedMonth, {
-        currency: defaultCurrency,
-      }),
-    [transactions, categories, selectedMonth, defaultCurrency],
+      getHormigaDrainAlert(
+        transactions,
+        categories,
+        selectedMonth,
+        paydayWeekday,
+        { currency: defaultCurrency },
+      ),
+    [transactions, categories, selectedMonth, paydayWeekday, defaultCurrency],
   );
 
   const budgetAlerts = useMemo(
@@ -110,9 +114,17 @@ export default function ResumenView() {
         categories,
         budgets,
         selectedMonth,
+        paydayWeekday,
         defaultCurrency,
       ),
-    [transactions, categories, budgets, selectedMonth, defaultCurrency],
+    [
+      transactions,
+      categories,
+      budgets,
+      selectedMonth,
+      paydayWeekday,
+      defaultCurrency,
+    ],
   );
 
   const categorySpendAlerts = useMemo(
@@ -121,10 +133,11 @@ export default function ResumenView() {
         transactions,
         categories,
         selectedMonth,
+        paydayWeekday,
         0.2,
         defaultCurrency,
       ),
-    [transactions, categories, selectedMonth, defaultCurrency],
+    [transactions, categories, selectedMonth, paydayWeekday, defaultCurrency],
   );
 
   const focusedWeek = useMemo(() => {

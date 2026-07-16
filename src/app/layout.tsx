@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, IBM_Plex_Mono, Source_Sans_3 } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
+import { AuthSessionProvider } from "@/components/AuthSessionProvider";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -71,7 +72,9 @@ export default function RootLayout({
       <body
         className={`${fraunces.variable} ${sourceSans.variable} ${sourceSans.className} ${ibmPlexMono.variable} antialiased`}
       >
-        <AppShell>{children}</AppShell>
+        <AuthSessionProvider>
+          <AppShell>{children}</AppShell>
+        </AuthSessionProvider>
       </body>
     </html>
   );

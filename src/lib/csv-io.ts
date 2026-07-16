@@ -1,4 +1,4 @@
-import { METHOD_LABELS, parseMoneyInput } from "@/lib/format";
+import { METHOD_LABELS, parseMoneyInput, roundAmountForCurrency } from "@/lib/format";
 import type {
   Category,
   IncomeSource,
@@ -146,16 +146,17 @@ export function parseTransactionsCsv(
         ? (sourceByName.get(fuente.trim().toLowerCase()) ?? null)
         : null;
 
+    const currency = parseCurrency(moneda, defaultCurrency);
     rows.push({
       type,
-      amount: Math.round(amount),
+      amount: roundAmountForCurrency(amount, currency),
       date,
       method,
       categoryId,
       incomeSourceId,
       note: nota.trim(),
       title: titulo.trim() || (type === "ingreso" ? "Ingreso" : "Gasto"),
-      currency: parseCurrency(moneda, defaultCurrency),
+      currency,
       origin: "importado",
     });
   }

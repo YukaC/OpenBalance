@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { extractCategoryPattern } from "@/lib/classifier";
 import { getAppToday, inferFixedPayWeekIndex, todayIso } from "@/lib/dates";
 import { FOCUS_RING } from "@/lib/focus-ring";
-import { METHOD_LABELS, formatMoney, parseMoneyInput } from "@/lib/format";
+import { METHOD_LABELS, formatMoney, parseMoneyInput, roundAmountForCurrency } from "@/lib/format";
+import { isActive } from "@/lib/entity-lifecycle";
 import { detectRecurringIncomeHint } from "@/lib/recurring-income";
 import type { PaymentMethod, TransactionType } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
@@ -38,6 +39,19 @@ export function TransactionForm() {
     (s) => s.rememberCategoryCorrection,
   );
   const updateIncomeSource = useFinanceStore((s) => s.updateIncomeSource);
+
+  const activeCategories = useMemo(
+    () => categories.filter(isActive),
+    [categories],
+  );
+  const activeIncomeSources = useMemo(
+    () => incomeSources.filter(isActive),
+    [incomeSources],
+  );
+  const activeAccounts = useMemo(
+    () => accounts.filter(isActive),
+    [accounts],
+  );
   const showToast = useToastStore((s) => s.showToast);
 
   const isEditing = Boolean(editingTransactionId);
@@ -50,10 +64,10 @@ export function TransactionForm() {
   const [method, setMethod] = useState<PaymentMethod>("transferencia");
   const [categoryId, setCategoryId] = useState<string>("");
   const [incomeSourceId, setIncomeSourceId] = useState<string>(
-    incomeSources[0]?.id ?? "",
+    activeIncomeSources[0]?.id ?? "",
   );
   const [accountId, setAccountId] = useState<string>(
-    defaultAccountId ?? accounts[0]?.id ?? "",
+    defaultAccountId ?? activeAccounts[0]?.id ?? "",
   );
   const [note, setNote] = useState("");
   const [title, setTitle] = useState("");
@@ -82,8 +96,8 @@ export function TransactionForm() {
 
   useEffect(() => {
     if (editingTransactionId) return;
-    setAccountId(defaultAccountId ?? accounts[0]?.id ?? "");
-  }, [editingTransactionId, defaultAccountId, accounts]);
+    setAccountId(defaultAccountId ?? activeAccounts[0]?.id ?? "");
+  }, [editingTransactionId, defaultAccountId, activeAccounts]);
 
   useEffect(() => {
     if (!editingTransactionId) return;
@@ -104,12 +118,14 @@ export function TransactionForm() {
     setMethod(transaction.method);
     setCategoryId(transaction.categoryId ?? "");
     setIncomeSourceId(
-      transaction.incomeSourceId ?? storeIncomeSources[0]?.id ?? "",
+      transaction.incomeSourceId ??
+        storeIncomeSources.find(isActive)?.id ??
+        "",
     );
     setAccountId(
       transaction.accountId ??
         profile.defaultAccountId ??
-        storeAccounts[0]?.id ??
+        storeAccounts.find(isActive)?.id ??
         "",
     );
     setNote(transaction.note);
@@ -223,8 +239,8 @@ export function TransactionForm() {
     if (type !== "ingreso") return null;
     if (!Number.isFinite(amountNumber) || amountNumber <= 0) return null;
     return detectRecurringIncomeHint(
-      transactions,
-      incomeSources,
+      transactions.filter(isActive),
+      activeIncomeSources,
       incomeSourceId || null,
       amountNumber,
       date,
@@ -234,7 +250,7 @@ export function TransactionForm() {
     type,
     amountNumber,
     transactions,
-    incomeSources,
+    activeIncomeSources,
     incomeSourceId,
     date,
   ]);
@@ -252,9 +268,11 @@ export function TransactionForm() {
     setDidMarkRecurring(true);
   }
 
-  const selectedAccount = accounts.find((account) => account.id === accountId);
+  const selectedAccount = activeAccounts.find(
+    (account) => account.id === accountId,
+  );
   const showAccountCurrencyHelper =
-    accounts.length > 1 ||
+    activeAccounts.length > 1 ||
     selectedAccount?.currency !== defaultCurrency;
 
   function handleSubmit(event: React.FormEvent) {
@@ -270,8 +288,9 @@ export function TransactionForm() {
     const resolvedTitle =
       title.trim() ||
       (type === "ingreso"
-        ? incomeSources.find((s) => s.id === incomeSourceId)?.name ?? "Ingreso"
-        : categories.find((c) => c.id === categoryId)?.name ?? "Gasto");
+        ? activeIncomeSources.find((s) => s.id === incomeSourceId)?.name ??
+          "Ingreso"
+        : activeCategories.find((c) => c.id === categoryId)?.name ?? "Gasto");
 
     if (
       type === "gasto" &&
@@ -287,7 +306,7 @@ export function TransactionForm() {
 
     const payload = {
       type,
-      amount: Math.round(amountNumber),
+      amount: roundAmountForCurrency(amountNumber, defaultCurrency),
       date,
       method,
       categoryId: type === "gasto" ? categoryId || null : null,
@@ -551,7 +570,7 @@ export function TransactionForm() {
             </p>
           ) : null}
 
-          {accounts.length > 0 ? (
+          {activeAccounts.length > 0 ? (
             <label htmlFor="tx-account" className="mb-3.5 flex flex-col gap-1.5">
               <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
                 Cuenta
@@ -564,7 +583,7 @@ export function TransactionForm() {
                 onChange={(e) => setAccountId(e.target.value)}
                 className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--card)] focus:border-[var(--select)]"
               >
-                {accounts.map((account) => (
+                {activeAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name} ({account.currency})
                   </option>
@@ -592,7 +611,7 @@ export function TransactionForm() {
                 onChange={(e) => setIncomeSourceId(e.target.value)}
                 className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--card)] focus:border-[var(--select)]"
               >
-                {incomeSources.map((source) => (
+                {activeIncomeSources.map((source) => (
                   <option key={source.id} value={source.id}>
                     {source.name}
                   </option>
@@ -623,7 +642,7 @@ export function TransactionForm() {
                 className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--card)] focus:border-[var(--select)]"
               >
                 <option value="">Elegir categoría</option>
-                {categories.map((category) => (
+                {activeCategories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.icon} {category.name}
                   </option>

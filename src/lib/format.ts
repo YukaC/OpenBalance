@@ -2,6 +2,20 @@ import type { Weekday } from "./types";
 
 export type CurrencyCode = "ARS" | "USD";
 
+/**
+ * Normalize an amount for storage by currency:
+ * ARS → whole pesos; USD → two decimal places (cents).
+ */
+export function roundAmountForCurrency(
+  amount: number,
+  currency: CurrencyCode,
+): number {
+  if (currency === "USD") {
+    return Math.round(amount * 100) / 100;
+  }
+  return Math.round(amount);
+}
+
 const CURRENCY_LOCALE: Record<CurrencyCode, string> = {
   ARS: "es-AR",
   USD: "en-US",
