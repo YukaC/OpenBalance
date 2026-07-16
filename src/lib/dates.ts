@@ -6,8 +6,8 @@ import {
   getISOWeek,
   getISOWeekYear,
   parseISO,
+  startOfDay,
   startOfMonth,
-  startOfWeek,
   subMonths,
 } from "date-fns";
 import { es } from "date-fns/locale";
@@ -47,26 +47,62 @@ export function previousMonthKey(monthKey: string): string {
   return toMonthKey(subMonths(parseMonthKey(monthKey), 1));
 }
 
+/** date-fns es locale returns lowercase weekday/month; title-case for UI copy. */
+function capitalizeDateParts(label: string): string {
+  return label.replace(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/g, (word) => {
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+}
+
 export function formatMonthLabel(monthKey: string): string {
   const label = format(parseMonthKey(monthKey), "MMMM yyyy", { locale: es });
-  return label.charAt(0).toUpperCase() + label.slice(1);
+  return capitalizeDateParts(label);
+}
+
+export function formatMonthName(monthKey: string): string {
+  return capitalizeDateParts(
+    format(parseMonthKey(monthKey), "MMMM", { locale: es }),
+  );
 }
 
 export function formatShortDate(date: string): string {
-  return format(parseISO(date), "EEE d MMM", { locale: es });
+  return capitalizeDateParts(
+    format(parseISO(date), "EEE d MMM", { locale: es }),
+  );
 }
 
 export function formatDayMonth(date: Date): string {
-  return format(date, "d MMM", { locale: es });
+  return capitalizeDateParts(format(date, "d MMM", { locale: es }));
 }
 
+export function formatWeekRangeLabel(start: Date, end: Date): string {
+  const sameMonth = format(start, "MM") === format(end, "MM");
+  if (sameMonth) {
+    return capitalizeDateParts(
+      `${format(start, "d", { locale: es })} — ${format(end, "d MMM", { locale: es })}`,
+    );
+  }
+  return `${formatDayMonth(start)} — ${formatDayMonth(end)}`;
+}
+
+/**
+ * 5-day work week that ends on the user's payday.
+ * Mid-week → upcoming payday. Weekend after payday → week that just ended
+ * (same horizon as getMonthWorkWeeks: weekStart + 6 days).
+ */
 export function getPayWeekBounds(
   reference: Date,
   paydayWeekday: Weekday,
 ): { start: Date; end: Date } {
-  const weekStartsOn = WEEKDAY_TO_NUMBER[paydayWeekday] === 5 ? 1 : 1;
-  const start = startOfWeek(reference, { weekStartsOn: weekStartsOn as 0 | 1 });
-  const end = addDays(start, 4);
+  const paydayNumber = WEEKDAY_TO_NUMBER[paydayWeekday];
+  const day = reference.getDay();
+  const daysSincePayday = (day - paydayNumber + 7) % 7;
+  const daysUntilPayday = (paydayNumber - day + 7) % 7;
+  const end =
+    daysSincePayday > 0 && daysSincePayday <= 2
+      ? startOfDay(addDays(reference, -daysSincePayday))
+      : startOfDay(addDays(reference, daysUntilPayday));
+  const start = startOfDay(addDays(end, -4));
   return { start, end };
 }
 
@@ -75,7 +111,9 @@ export function formatCurrentWeekLabel(
   paydayWeekday: Weekday,
 ): string {
   const { start, end } = getPayWeekBounds(reference, paydayWeekday);
-  return `Semana actual: ${format(start, "EEE d", { locale: es })} — ${format(end, "EEE d MMM", { locale: es })}`;
+  return `Semana actual: ${capitalizeDateParts(
+    `${format(start, "EEE d", { locale: es })} — ${format(end, "EEE d MMM", { locale: es })}`,
+  )}`;
 }
 
 export interface MonthWeekSlice {
@@ -88,29 +126,37 @@ export interface MonthWeekSlice {
   isCurrent: boolean;
 }
 
-/** Work weeks Mon–Fri that intersect the month (matches mockup payday Fridays). */
+/**
+ * Work weeks (5 days ending on payday) that intersect the month.
+ * Ranges and “current” week follow the selected payday weekday.
+ */
 export function getMonthWorkWeeks(
   monthKey: string,
   referenceToday: Date = new Date(),
+  paydayWeekday: Weekday = "viernes",
 ): MonthWeekSlice[] {
   const monthStart = startOfMonth(parseMonthKey(monthKey));
   const monthEnd = endOfMonth(monthStart);
-  let cursor = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const paydayNumber = WEEKDAY_TO_NUMBER[paydayWeekday];
+
+  const scanStart = addDays(monthStart, -4);
+  const daysUntilPayday = (paydayNumber - scanStart.getDay() + 7) % 7;
+  let paydayCursor = startOfDay(addDays(scanStart, daysUntilPayday));
 
   const weeks: MonthWeekSlice[] = [];
   let index = 1;
 
-  while (cursor <= monthEnd || weeks.length === 0) {
-    const weekStart = cursor;
-    const weekEnd = addDays(weekStart, 4);
-    const intersects =
-      weekEnd >= monthStart && weekStart <= monthEnd;
+  while (paydayCursor <= addDays(monthEnd, 4)) {
+    const weekEnd = paydayCursor;
+    const weekStart = addDays(weekEnd, -4);
+    const intersects = weekEnd >= monthStart && weekStart <= monthEnd;
 
     if (intersects) {
       const clampedStart = weekStart < monthStart ? monthStart : weekStart;
       const clampedEnd = weekEnd > monthEnd ? monthEnd : weekEnd;
+      const weekHorizonEnd = addDays(weekStart, 6);
       const isCurrent =
-        referenceToday >= weekStart && referenceToday <= addDays(weekStart, 6);
+        referenceToday >= weekStart && referenceToday <= weekHorizonEnd;
 
       weeks.push({
         index,
@@ -118,16 +164,13 @@ export function getMonthWorkWeeks(
         end: weekEnd,
         weekIso: toWeekIso(weekStart),
         label: isCurrent ? `Semana ${index} · Hoy` : `Semana ${index}`,
-        rangeLabel: `${formatDayMonth(clampedStart)} — ${formatDayMonth(clampedEnd)}`.replace(
-          /\./g,
-          "",
-        ),
+        rangeLabel: formatWeekRangeLabel(clampedStart, clampedEnd),
         isCurrent,
       });
       index += 1;
     }
 
-    cursor = addDays(cursor, 7);
+    paydayCursor = addDays(paydayCursor, 7);
     if (weeks.length > 6) break;
   }
 

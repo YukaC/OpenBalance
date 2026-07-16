@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { todayIso } from "@/lib/dates";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { format } from "date-fns";
+import { extractCategoryPattern } from "@/lib/classifier";
 import { METHOD_LABELS } from "@/lib/format";
-import { detectRecurringIncomeHint } from "@/lib/summaries";
+import { detectRecurringIncomeHint } from "@/lib/recurring-income";
 import type { PaymentMethod, TransactionType } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -14,6 +15,9 @@ const METHODS: PaymentMethod[] = [
   "tarjeta_credito",
 ];
 
+const REFERENCE_TODAY = new Date("2026-07-16");
+const REFERENCE_TODAY_ISO = format(REFERENCE_TODAY, "yyyy-MM-dd");
+
 export function TransactionForm() {
   const formPrefillType = useFinanceStore((s) => s.formPrefillType);
   const closeForm = useFinanceStore((s) => s.closeForm);
@@ -22,10 +26,15 @@ export function TransactionForm() {
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const transactions = useFinanceStore((s) => s.transactions);
   const suggestCategory = useFinanceStore((s) => s.suggestCategory);
+  const rememberCategoryCorrection = useFinanceStore(
+    (s) => s.rememberCategoryCorrection,
+  );
+  const updateIncomeSource = useFinanceStore((s) => s.updateIncomeSource);
 
+  const panelRef = useRef<HTMLDivElement>(null);
   const [type, setType] = useState<TransactionType>(formPrefillType);
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(todayIso());
+  const [date, setDate] = useState(REFERENCE_TODAY_ISO);
   const [method, setMethod] = useState<PaymentMethod>("transferencia");
   const [categoryId, setCategoryId] = useState<string>("");
   const [incomeSourceId, setIncomeSourceId] = useState<string>(
@@ -34,32 +43,125 @@ export function TransactionForm() {
   const [note, setNote] = useState("");
   const [title, setTitle] = useState("");
   const [autoSuggested, setAutoSuggested] = useState(false);
+  const [suggestedCategoryId, setSuggestedCategoryId] = useState<string | null>(
+    null,
+  );
+  const [hasManualCategoryOverride, setHasManualCategoryOverride] =
+    useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [isRecurringHintDismissed, setIsRecurringHintDismissed] =
+    useState(false);
+  const [didMarkRecurring, setDidMarkRecurring] = useState(false);
 
   useEffect(() => {
     setType(formPrefillType);
   }, [formPrefillType]);
 
   useEffect(() => {
-    if (type !== "gasto") return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const panel = panelRef.current;
+    const focusable = panel?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    focusable?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Tab" || !panel) return;
+      const nodes = panel.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      const list = [...nodes].filter((node) => !node.hasAttribute("disabled"));
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (type !== "gasto") {
+      setSuggestedCategoryId(null);
+      setAutoSuggested(false);
+      setHasManualCategoryOverride(false);
+      return;
+    }
     const text = `${title} ${note}`.trim();
-    if (!text) return;
+    if (!text) {
+      setSuggestedCategoryId(null);
+      setAutoSuggested(false);
+      return;
+    }
     const suggestion = suggestCategory(text);
-    if (suggestion.categoryId) {
+    setSuggestedCategoryId(suggestion.categoryId);
+    if (!suggestion.categoryId) {
+      setAutoSuggested(false);
+      return;
+    }
+    if (!hasManualCategoryOverride) {
       setCategoryId(suggestion.categoryId);
       setAutoSuggested(suggestion.isAuto);
     }
-  }, [note, title, type, suggestCategory]);
+  }, [note, title, type, suggestCategory, hasManualCategoryOverride]);
+
+  useEffect(() => {
+    setIsRecurringHintDismissed(false);
+    setDidMarkRecurring(false);
+  }, [incomeSourceId, amount, date]);
+
+  function requestClose() {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    window.setTimeout(() => {
+      closeForm();
+    }, 150);
+  }
 
   const amountNumber = Number(amount.replace(",", "."));
-  const showRecurringHint =
-    type === "ingreso" &&
-    Number.isFinite(amountNumber) &&
-    amountNumber > 0 &&
-    detectRecurringIncomeHint(
+  const recurringSuggestion = useMemo(() => {
+    if (type !== "ingreso") return null;
+    if (!Number.isFinite(amountNumber) || amountNumber <= 0) return null;
+    return detectRecurringIncomeHint(
       transactions,
+      incomeSources,
       incomeSourceId || null,
       amountNumber,
+      date,
+      { referenceDate: REFERENCE_TODAY },
     );
+  }, [
+    type,
+    amountNumber,
+    transactions,
+    incomeSources,
+    incomeSourceId,
+    date,
+  ]);
+
+  const showRecurringHint =
+    Boolean(recurringSuggestion) &&
+    !isRecurringHintDismissed &&
+    !didMarkRecurring;
+
+  function handleMarkRecurring() {
+    if (!recurringSuggestion) return;
+    updateIncomeSource(recurringSuggestion.incomeSourceId, {
+      isRecurring: true,
+    });
+    setDidMarkRecurring(true);
+  }
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -71,6 +173,18 @@ export function TransactionForm() {
         ? incomeSources.find((s) => s.id === incomeSourceId)?.name ?? "Ingreso"
         : categories.find((c) => c.id === categoryId)?.name ?? "Gasto");
 
+    if (
+      type === "gasto" &&
+      categoryId &&
+      suggestedCategoryId &&
+      categoryId !== suggestedCategoryId
+    ) {
+      const pattern = extractCategoryPattern(title, note);
+      if (pattern) {
+        rememberCategoryCorrection(pattern, categoryId);
+      }
+    }
+
     addTransaction({
       type,
       amount: Math.round(amountNumber),
@@ -81,49 +195,55 @@ export function TransactionForm() {
       note: note.trim(),
       title: resolvedTitle,
     });
+    requestClose();
   }
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center p-0 min-[880px]:items-center min-[880px]:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="tx-form-title"
     >
       <button
         type="button"
-        className="absolute inset-0 bg-[rgba(20,20,20,0.28)]"
+        className={`modal-backdrop absolute inset-0 bg-[rgba(31,29,32,0.42)] dark:bg-[rgba(0,0,0,0.55)] ${
+          isLeaving ? "is-leaving" : ""
+        }`}
         aria-label="Cerrar"
-        onClick={closeForm}
+        onClick={requestClose}
       />
 
-      <div className="relative z-10 max-h-[92dvh] w-full max-w-[var(--shell-max)] overflow-y-auto rounded-t-[var(--radius-lg)] bg-[var(--surface)] px-5 pb-8 pt-4 shadow-[var(--shadow-sheet)] sm:mx-4 sm:rounded-[var(--radius-lg)] sm:pb-6">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--line-strong)] sm:hidden" />
-
-        <div className="mb-5 flex items-start justify-between gap-3">
+      <div
+        ref={panelRef}
+        className={`modal-panel mobile-bottom-sheet relative z-10 max-h-[92dvh] w-full max-w-[420px] overflow-y-auto rounded-t-[20px] bg-[var(--card)] p-5 shadow-[var(--shadow-sheet)] min-[880px]:rounded-[20px] min-[880px]:p-6 ${
+          isLeaving ? "is-leaving" : ""
+        }`}
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
           <h2
             id="tx-form-title"
-            className="font-display text-[1.65rem] tracking-[-0.02em] text-[var(--ink)]"
+            className="font-display text-[20px] font-semibold text-[var(--ink)]"
           >
             Nueva transacción
           </h2>
           <button
             type="button"
-            onClick={closeForm}
-            className="mt-1 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            onClick={requestClose}
+            className="mt-0.5 min-h-10 rounded-lg px-2 text-[13px] font-semibold text-[var(--ink-soft)] transition-soft hover:bg-[var(--paper-deep)] hover:text-[var(--ink)] focus-visible:outline-none"
           >
             Cerrar
           </button>
         </div>
 
-        <div className="mb-5 grid grid-cols-2 gap-2 rounded-[var(--radius-md)] bg-[var(--chip)] p-1">
+        <div className="mb-5 flex rounded-xl bg-[var(--bg)] p-1">
           <button
             type="button"
             onClick={() => setType("ingreso")}
-            className={`rounded-[var(--radius-sm)] px-3 py-2.5 text-[13.5px] transition-colors ${
+            className={`min-h-11 flex-1 rounded-[10px] px-3 py-2.5 text-[13.5px] font-bold transition-soft focus-visible:outline-none active:scale-[0.98] ${
               type === "ingreso"
-                ? "bg-[var(--surface)] font-medium text-[var(--income)] shadow-sm"
-                : "text-[var(--ink-muted)]"
+                ? "bg-[var(--green)] text-[#ffffff] shadow-sm"
+                : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
             }`}
           >
             ↓ Ingreso
@@ -131,92 +251,101 @@ export function TransactionForm() {
           <button
             type="button"
             onClick={() => setType("gasto")}
-            className={`rounded-[var(--radius-sm)] px-3 py-2.5 text-[13.5px] transition-colors ${
+            className={`min-h-11 flex-1 rounded-[10px] px-3 py-2.5 text-[13.5px] font-bold transition-soft focus-visible:outline-none active:scale-[0.98] ${
               type === "gasto"
-                ? "bg-[var(--surface)] font-medium text-[var(--ink)] shadow-sm"
-                : "text-[var(--ink-muted)]"
+                ? "bg-[var(--red)] text-[#ffffff] shadow-sm"
+                : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
             }`}
           >
             ↑ Gasto
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <label htmlFor="tx-amount" className="mb-3.5 flex flex-col gap-1.5">
+            <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
               Monto
             </span>
             <input
+              id="tx-amount"
+              name="amount"
               inputMode="decimal"
+              autoComplete="off"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
+              placeholder="$ 0"
               required
-              className="w-full border-b border-[var(--line-strong)] bg-transparent py-2 font-mono text-[2rem] tracking-tight text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--ink)]"
+              className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 font-mono text-[22px] font-semibold text-[var(--ink)] outline-none transition-soft placeholder:text-[var(--ink-faint)] focus:border-[var(--select)]"
             />
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
+          <label htmlFor="tx-title" className="mb-3.5 flex flex-col gap-1.5">
+            <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
               Título
             </span>
             <input
+              id="tx-title"
+              name="title"
+              autoComplete="off"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={
                 type === "ingreso" ? "Ej. Changa viernes" : "Ej. Supermercado"
               }
-              className="w-full rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
+              className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus:border-[var(--ink)]"
             />
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
-              Fecha
-            </span>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-              className="w-full rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
-            />
-          </label>
+          <div className="mb-3.5 grid grid-cols-2 gap-3">
+            <label htmlFor="tx-date" className="flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+                Fecha
+              </span>
+              <input
+                id="tx-date"
+                name="date"
+                type="date"
+                autoComplete="off"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+                className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus:border-[var(--ink)]"
+              />
+            </label>
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-[12px] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
-              Método
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              {METHODS.map((item) => {
-                const active = method === item;
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setMethod(item)}
-                    className={`rounded-[var(--radius-full)] px-3 py-1.5 text-[12.5px] transition-colors ${
-                      active
-                        ? "bg-[var(--chip-active)] text-[var(--chip-active-text)]"
-                        : "bg-[var(--chip)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                    }`}
-                  >
-                    {METHOD_LABELS[item]}
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {type === "ingreso" ? (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
-                Fuente
+            <label htmlFor="tx-method" className="flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+                Método
               </span>
               <select
+                id="tx-method"
+                name="method"
+                autoComplete="off"
+                value={method}
+                onChange={(e) => setMethod(e.target.value as PaymentMethod)}
+                className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus:border-[var(--ink)]"
+              >
+                {METHODS.map((item) => (
+                  <option key={item} value={item}>
+                    {METHOD_LABELS[item]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {type === "ingreso" ? (
+            <label htmlFor="tx-income-source" className="mb-3.5 flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+                Fuente / Categoría
+              </span>
+              <select
+                id="tx-income-source"
+                name="incomeSourceId"
+                autoComplete="off"
                 value={incomeSourceId}
                 onChange={(e) => setIncomeSourceId(e.target.value)}
-                className="w-full rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
+                className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus:border-[var(--ink)]"
               >
                 {incomeSources.map((source) => (
                   <option key={source.id} value={source.id}>
@@ -226,23 +355,27 @@ export function TransactionForm() {
               </select>
             </label>
           ) : (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
-                Categoría
+            <label htmlFor="tx-category" className="mb-3.5 flex flex-col gap-1.5">
+              <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+                Fuente / Categoría
                 {autoSuggested ? (
-                  <span className="ml-2 normal-case tracking-normal text-[var(--ink-muted)]">
+                  <span className="ml-2 font-normal text-[var(--gold)]">
                     · sugerida
                   </span>
                 ) : null}
               </span>
               <select
+                id="tx-category"
+                name="categoryId"
+                autoComplete="off"
                 value={categoryId}
                 onChange={(e) => {
                   setCategoryId(e.target.value);
+                  setHasManualCategoryOverride(true);
                   setAutoSuggested(false);
                 }}
                 required
-                className="w-full rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
+                className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus:border-[var(--ink)]"
               >
                 <option value="">Elegir categoría</option>
                 {categories.map((category) => (
@@ -254,29 +387,55 @@ export function TransactionForm() {
             </label>
           )}
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[12px] uppercase tracking-[0.06em] text-[var(--ink-faint)]">
-              Nota
-            </span>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={2}
-              placeholder="Opcional"
-              className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
-            />
-          </label>
+          {showRecurringHint && recurringSuggestion ? (
+            <div className="mb-3.5 -mt-1.5 rounded-lg bg-[var(--gold-soft)] px-2.5 py-2 text-[11.5px] text-[var(--gold)]">
+              <p>
+                Cargaste esto varios {recurringSuggestion.weekdayLabel}s
+                seguidos — ¿lo marco como ingreso recurrente?
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleMarkRecurring}
+                  className="rounded-lg bg-[var(--ink)] px-2.5 py-1 text-[11px] font-bold text-[var(--ink-contrast)] transition-opacity hover:opacity-90"
+                >
+                  Sí, marcar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRecurringHintDismissed(true)}
+                  className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)] transition-colors hover:text-[var(--ink)]"
+                >
+                  Ahora no
+                </button>
+              </div>
+            </div>
+          ) : null}
 
-          {showRecurringHint ? (
-            <p className="rounded-[var(--radius-md)] bg-[var(--income-soft)] px-3 py-2.5 text-[13px] text-[var(--income)]">
-              Parece un ingreso recurrente (mismo monto / viernes). Podés
-              marcarlo como fijo más adelante.
+          {didMarkRecurring ? (
+            <p className="mb-3.5 -mt-1.5 rounded-lg bg-[var(--green-soft)] px-2.5 py-1.5 text-[11.5px] text-[var(--green)]">
+              Fuente marcada como recurrente.
             </p>
           ) : null}
 
+          <label htmlFor="tx-note" className="mb-3.5 flex flex-col gap-1.5">
+            <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+              Nota (opcional)
+            </span>
+            <input
+              id="tx-note"
+              name="note"
+              autoComplete="off"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Ej: transferencia de Juan"
+              className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus:border-[var(--ink)]"
+            />
+          </label>
+
           <button
             type="submit"
-            className="mt-1 w-full rounded-[var(--radius-md)] bg-[var(--ink)] py-3.5 text-[14.5px] font-medium text-[var(--chip-active-text)] transition-opacity hover:opacity-90 active:opacity-80"
+            className="mt-2 min-h-12 w-full rounded-xl bg-[var(--ink)] py-3.5 text-[14.5px] font-bold text-[var(--ink-contrast)] transition-soft hover:opacity-90 hover:shadow-[var(--shadow-sheet)] focus-visible:outline-none active:scale-[0.99]"
           >
             {type === "ingreso" ? "Guardar ingreso" : "Guardar gasto"}
           </button>

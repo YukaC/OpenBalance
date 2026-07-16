@@ -1,16 +1,17 @@
-import type { Metadata } from "next";
-import { DM_Sans, IBM_Plex_Mono, Newsreader } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Fraunces, IBM_Plex_Mono, Inter } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
-const newsreader = Newsreader({
-  variable: "--font-newsreader",
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
   display: "swap",
+  preload: false,
 });
 
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
@@ -18,13 +19,24 @@ const dmSans = DM_Sans({
 const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400", "500", "600"],
   display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
   title: "Rinde",
   description: "Finanzas personales — resumen semanal y mensual",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f3eee6" },
+    { media: "(prefers-color-scheme: dark)", color: "#1f1d20" },
+  ],
 };
 
 export default function RootLayout({
@@ -33,9 +45,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("rinde-theme");if(t==="dark"){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark"}else{document.documentElement.style.colorScheme="light"}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
-        className={`${newsreader.variable} ${dmSans.variable} ${ibmPlexMono.variable} antialiased`}
+        className={`${fraunces.variable} ${inter.variable} ${inter.className} ${ibmPlexMono.variable} antialiased`}
       >
         <AppShell>{children}</AppShell>
       </body>

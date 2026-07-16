@@ -43,12 +43,14 @@ interface FinanceState {
   transactions: Transaction[];
   userRules: UserCategoryRule[];
   selectedMonth: string;
+  selectedWeekIso: string | null;
   viewMode: ViewMode;
   isFormOpen: boolean;
   formPrefillType: TransactionType;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
   setSelectedMonth: (monthKey: string) => void;
+  setSelectedWeekIso: (weekIso: string | null) => void;
   setViewMode: (mode: ViewMode) => void;
   openForm: (type?: TransactionType) => void;
   closeForm: () => void;
@@ -58,6 +60,7 @@ interface FinanceState {
   addCategory: (category: Omit<Category, "id">) => void;
   updateCategory: (id: string, patch: Partial<Category>) => void;
   addIncomeSource: (source: Omit<IncomeSource, "id">) => void;
+  updateIncomeSource: (id: string, patch: Partial<IncomeSource>) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
   setPayday: (weekday: Weekday) => void;
   rememberCategoryCorrection: (pattern: string, categoryId: string) => void;
@@ -66,7 +69,12 @@ interface FinanceState {
 }
 
 function createId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return `${prefix}-${randomUuid.slice(0, 8)}`;
+
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  const timePart = Date.now().toString(36).slice(-4);
+  return `${prefix}-${randomPart}${timePart}`;
 }
 
 export const useFinanceStore = create<FinanceState>()(
@@ -78,12 +86,15 @@ export const useFinanceStore = create<FinanceState>()(
       transactions: SEED_TRANSACTIONS,
       userRules: DEFAULT_USER_RULES,
       selectedMonth: "2026-07",
+      selectedWeekIso: null,
       viewMode: "mes",
       isFormOpen: false,
       formPrefillType: "ingreso",
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
-      setSelectedMonth: (monthKey) => set({ selectedMonth: monthKey }),
+      setSelectedMonth: (monthKey) =>
+        set({ selectedMonth: monthKey, selectedWeekIso: null }),
+      setSelectedWeekIso: (weekIso) => set({ selectedWeekIso: weekIso }),
       setViewMode: (mode) => set({ viewMode: mode }),
       openForm: (type = "gasto") =>
         set({ isFormOpen: true, formPrefillType: type }),
@@ -122,7 +133,6 @@ export const useFinanceStore = create<FinanceState>()(
 
         set((state) => ({
           transactions: [transaction, ...state.transactions],
-          isFormOpen: false,
         }));
       },
       updateTransaction: (id, patch) =>
@@ -162,11 +172,18 @@ export const useFinanceStore = create<FinanceState>()(
             { ...source, id: createId("src") },
           ],
         })),
+      updateIncomeSource: (id, patch) =>
+        set((state) => ({
+          incomeSources: state.incomeSources.map((item) =>
+            item.id === id ? { ...item, ...patch } : item,
+          ),
+        })),
       updateProfile: (patch) =>
         set((state) => ({ profile: { ...state.profile, ...patch } })),
       setPayday: (weekday) =>
         set((state) => ({
           profile: { ...state.profile, paydayWeekday: weekday },
+          selectedWeekIso: null,
         })),
       rememberCategoryCorrection: (pattern, categoryId) => {
         const normalized = pattern.trim().toLowerCase();
@@ -201,8 +218,42 @@ export const useFinanceStore = create<FinanceState>()(
     }),
     {
       name: "rinde-finance-v2",
+      partialize: (state) => ({
+        profile: state.profile,
+        categories: state.categories,
+        incomeSources: state.incomeSources,
+        transactions: state.transactions,
+        userRules: state.userRules,
+        selectedMonth: state.selectedMonth,
+        viewMode: state.viewMode,
+      }),
       onRehydrateStorage: () => (state) => {
-        state?.setHydrated(true);
+        if (state) {
+          const hasSueldo = state.incomeSources.some(
+            (source) => source.id === "src-sueldo" || source.name === "Sueldo",
+          );
+          if (!hasSueldo) {
+            state.incomeSources = [
+              {
+                id: "src-sueldo",
+                name: "Sueldo",
+                type: "mensual",
+                isRecurring: true,
+              },
+              ...state.incomeSources,
+            ];
+          }
+
+          const defaultColorById = new Map(
+            DEFAULT_CATEGORIES.map((category) => [category.id, category.color]),
+          );
+          state.categories = state.categories.map((category) => {
+            const nextColor = defaultColorById.get(category.id);
+            return nextColor ? { ...category, color: nextColor } : category;
+          });
+
+          state.setHydrated(true);
+        }
       },
     },
   ),

@@ -1,40 +1,161 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #f7f4ef;
-  --paper-deep: #efeae2;
-  --ink: #141414;
-  --ink-muted: #6b6560;
-  --ink-faint: #9a948c;
-  --line: #e4ddd3;
-  --line-strong: #d0c8bc;
-  --surface: #ffffff;
-  --surface-raised: #fffcf8;
-  --income: #1a7a45;
-  --income-soft: #e8f5ee;
-  --expense: #141414;
-  --accent: #1a7a45;
-  --danger: #b42318;
-  --chip: #f0ebe3;
-  --chip-active: #141414;
-  --chip-active-text: #fffcf8;
-  --shadow-sheet: 0 -12px 40px rgba(20, 20, 20, 0.08);
+  /* Brand palette: #1F1D20 #492427 #803E2F #A79986 #3B3332 #3E3D38
+     Light = inverted warm paper; dark = charcoal + terracotta accent */
 
-  --background: var(--paper);
+  /* Text — charcoal ink on warm beige paper */
+  --ink: #1f1d20;
+  --ink-soft: #3b3332;
+  --ink-muted: #5c534f;
+  --ink-faint: #8a7f74;
+  --ink-contrast: #faf7f2;
+
+  /* Surfaces — lightened #A79986 family (paper, not raw mid-beige) */
+  --bg: #f3eee6;
+  --sidebar-bg: #e8dfd2;
+  --card: #fffcfa;
+  --line: #d4c9ba;
+  --line-strong: #b8aa98;
+  --paper: var(--bg);
+  --paper-deep: #e4d9c8;
+  --surface: var(--card);
+  --surface-raised: #faf6f0;
+
+  /* Semantic lanes — green=in, red=out, gold=alert; keep off terracotta brand */
+  --green: #0b8f56;
+  --green-soft: #d5f0e3;
+  --red: #c43a32;
+  --red-soft: #f5e0dc;
+  --gold: #a86b1a;
+  --gold-soft: #f5e6c8;
+
+  --income: var(--green);
+  --income-soft: var(--green-soft);
+  --expense: var(--red);
+  --accent: var(--green);
+  --danger: var(--red);
+
+  /* Selection / CTA — terracotta #803E2F + soft from #492427 */
+  --select: #803e2f;
+  --select-soft: #f0e0d8;
+  --select-fg: #492427;
+  --select-border: #803e2f;
+
+  --chip: var(--paper-deep);
+  --chip-active: var(--select);
+  --chip-active-text: #fffcfa;
+
+  /* Legacy on-ink fills (solid brand blocks only) */
+  --on-ink-muted: #a79986;
+  --on-ink-faint: #8a7f74;
+  --on-ink-income: #6fd9a8;
+  --on-ink-expense: #f0a399;
+
+  --shadow-sheet: 0 10px 28px rgba(31, 29, 32, 0.12);
+  --shadow-fab: 0 12px 28px rgba(31, 29, 32, 0.28);
+  --shadow-nav: 0 4px 14px rgba(31, 29, 32, 0.16);
+  --shadow-card: 0 1px 2px rgba(31, 29, 32, 0.04),
+    0 6px 16px rgba(31, 29, 32, 0.06);
+
+  --background: var(--bg);
   --foreground: var(--ink);
 
-  --font-display: var(--font-newsreader), "Times New Roman", serif;
-  --font-body: var(--font-dm-sans), "Helvetica Neue", sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-body: var(--font-inter), "Helvetica Neue", sans-serif;
   --font-number: var(--font-ibm-plex-mono), ui-monospace, monospace;
 
-  --radius-sm: 6px;
+  --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 999px;
 
   --nav-h: 64px;
   --fab-size: 56px;
-  --shell-max: 420px;
+  --fab-clearance: 72px;
+  --sidebar-w: 240px;
+  --shell-max: 1320px;
+  --list-max-h: min(48dvh, 420px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --page-pad-x: 16px;
+  --page-pad-y: 16px;
+}
+
+@media (max-width: 879px) {
+  :root {
+    --nav-h: calc(60px + env(safe-area-inset-bottom, 0px));
+    --fab-size: 52px;
+    --fab-clearance: calc(var(--nav-h) + var(--fab-size) + 24px);
+    --list-max-h: none;
+    --page-pad-x: 16px;
+    --page-pad-y: 16px;
+  }
+}
+
+html.dark {
+  /* Text — warm beige family; muted/faint lifted for card #3B3332 contrast */
+  --ink: #d2c4b0;
+  --ink-soft: #bbae9c;
+  --ink-muted: #a89a88;
+  --ink-faint: #95897c;
+  --ink-contrast: #1f1d20;
+
+  /* Surfaces — #1F1D20 page → #3B3332 / #3E3D38 raised steps */
+  --bg: #1f1d20;
+  --sidebar-bg: #2a2526;
+  --card: #3b3332;
+  --line: #4a4440;
+  --line-strong: #5c5550;
+  --paper: var(--bg);
+  --paper-deep: #3e3d38;
+  --surface: var(--card);
+  --surface-raised: #45403c;
+
+  /* Money hues stay distinct from terracotta UI accent */
+  --green: #3dba7a;
+  --green-soft: #1a2e24;
+  --red: #e06a5c;
+  --red-soft: #3a221f;
+  --gold: #d4a04a;
+  --gold-soft: #2e2618;
+
+  /* Terracotta select — soft #492427 clearly off card #3B3332 */
+  --select: #803e2f;
+  --select-soft: #492427;
+  --select-fg: #e8c9b8;
+  --select-border: #a0523f;
+
+  --chip: var(--paper-deep);
+  --chip-active: var(--select);
+  --chip-active-text: #f3eee6;
+
+  --on-ink-muted: color-mix(in srgb, var(--ink-contrast) 58%, transparent);
+  --on-ink-faint: color-mix(in srgb, var(--ink-contrast) 42%, transparent);
+  --on-ink-income: #0b8f56;
+  --on-ink-expense: #c43a32;
+
+  --shadow-sheet: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-fab: 0 12px 28px rgba(128, 62, 47, 0.35);
+  --shadow-nav: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 0 rgba(167, 153, 134, 0.06),
+    0 8px 20px rgba(0, 0, 0, 0.35);
+
+  --background: var(--bg);
+  --foreground: var(--ink);
+}
+
+@media (min-width: 880px) {
+  :root {
+    --list-max-h: min(48dvh, 420px);
+  }
+}
+
+@media (max-height: 720px) {
+  :root {
+    --list-max-h: min(36dvh, 280px);
+  }
 }
 
 @theme inline {
@@ -43,6 +164,7 @@
   --color-paper: var(--paper);
   --color-paper-deep: var(--paper-deep);
   --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-ink-muted: var(--ink-muted);
   --color-ink-faint: var(--ink-faint);
   --color-line: var(--line);
@@ -54,6 +176,13 @@
   --color-expense: var(--expense);
   --color-accent: var(--accent);
   --color-danger: var(--danger);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-green-soft: var(--green-soft);
+  --color-red-soft: var(--red-soft);
+  --color-select: var(--select);
+  --color-select-soft: var(--select-soft);
+  --color-select-fg: var(--select-fg);
   --color-chip: var(--chip);
   --color-chip-active: var(--chip-active);
   --color-chip-active-text: var(--chip-active-text);
@@ -63,64 +192,401 @@
   --shadow-sheet: var(--shadow-sheet);
 }
 
-/* Force light editorial look — ignore prefers-color-scheme dark */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: var(--paper);
-    --foreground: var(--ink);
+@layer base {
+  html {
+    color-scheme: light;
+    height: 100%;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    height: 100%;
+    min-height: 100dvh;
+    overflow: hidden;
+    background:
+      radial-gradient(
+        120% 80% at 0% 0%,
+        color-mix(in srgb, var(--select-soft) 55%, transparent),
+        transparent 55%
+      ),
+      radial-gradient(
+        90% 60% at 100% 0%,
+        color-mix(in srgb, var(--gold-soft) 45%, transparent),
+        transparent 50%
+      ),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (max-width: 879px) {
+    body {
+      font-size: 14.5px;
+    }
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  .font-mono,
+  .tabular-nums {
+    font-family: var(--font-number);
+    font-variant-numeric: tabular-nums;
+  }
+
+  a {
+    text-decoration: none;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Keyboard focus ring — skip mouse clicks via :focus-visible */
+  :where(
+    a,
+    button,
+    summary,
+    [role="button"],
+    [role="switch"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="option"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline: 2px solid var(--select);
+    outline-offset: 2px;
+  }
+
+  :where(input, select, textarea):focus-visible {
+    outline: 2px solid var(--select);
+    outline-offset: 1px;
+  }
+
+  ::selection {
+    background: var(--green-soft);
+    color: var(--ink);
   }
 }
 
-html {
-  color-scheme: light;
+@layer utilities {
+  .transition-soft {
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.2s ease,
+      transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.15s ease;
+  }
+
+  .hover-lift {
+    transition:
+      transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.2s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-surface {
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Selected — terracotta glass, soft edge + inner glow */
+  .is-selected {
+    background: color-mix(in srgb, var(--select-soft) 52%, transparent);
+    color: var(--select-fg);
+    border-color: color-mix(in srgb, var(--select-border) 18%, transparent);
+    box-shadow:
+      inset 0 0 24px color-mix(in srgb, var(--select) 16%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--ink-contrast) 42%, transparent),
+      inset 0 -8px 20px color-mix(in srgb, var(--select) 10%, transparent),
+      0 4px 18px color-mix(in srgb, var(--select) 10%, transparent);
+    backdrop-filter: blur(14px) saturate(1.35);
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+  }
+
+  html.dark .is-selected {
+    background: color-mix(in srgb, var(--select-soft) 68%, transparent);
+    border-color: color-mix(in srgb, var(--select-border) 22%, transparent);
+    box-shadow:
+      inset 0 0 28px color-mix(in srgb, var(--select) 28%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--ink) 14%, transparent),
+      inset 0 -10px 22px color-mix(in srgb, var(--select) 18%, transparent),
+      0 6px 20px color-mix(in srgb, var(--select) 18%, transparent);
+  }
+
+  .week-card.is-selected,
+  .week-card--selected {
+    border: 1px solid transparent;
+    background:
+      radial-gradient(
+        120% 90% at 50% 0%,
+        color-mix(in srgb, var(--select) 18%, transparent),
+        transparent 55%
+      ),
+      color-mix(in srgb, var(--select-soft) 62%, transparent);
+    color: var(--select-fg);
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 0 40px color-mix(in srgb, var(--select) 18%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--ink-contrast) 55%, transparent),
+      inset 0 -16px 32px color-mix(in srgb, var(--select) 12%, transparent),
+      0 10px 28px color-mix(in srgb, var(--select) 16%, transparent),
+      0 2px 6px color-mix(in srgb, var(--ink) 6%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  }
+
+  html.dark .week-card.is-selected,
+  html.dark .week-card--selected {
+    background:
+      radial-gradient(
+        120% 90% at 50% 0%,
+        color-mix(in srgb, var(--select) 28%, transparent),
+        transparent 55%
+      ),
+      color-mix(in srgb, var(--select-soft) 78%, transparent);
+    box-shadow:
+      inset 0 0 44px color-mix(in srgb, var(--select) 30%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--ink) 18%, transparent),
+      inset 0 -16px 32px color-mix(in srgb, var(--select) 20%, transparent),
+      0 12px 32px color-mix(in srgb, var(--select) 24%, transparent);
+  }
+
+  .week-card__accent {
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 16px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--select) 85%, white),
+      transparent
+    );
+    box-shadow: 0 0 12px color-mix(in srgb, var(--select) 55%, transparent);
+  }
+
+  .week-card__sheen {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--ink-contrast) 28%, transparent) 0%,
+      transparent 42%,
+      color-mix(in srgb, var(--select) 8%, transparent) 100%
+    );
+    opacity: 0.9;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .week-card--selected,
+    .week-card.is-selected {
+      transform: none;
+    }
+  }
+
+  .is-selected-solid {
+    background: var(--select);
+    color: var(--chip-active-text);
+    border-color: var(--select);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .is-selected {
+      background: var(--select-soft);
+    }
+
+    .week-card--selected,
+    .week-card.is-selected {
+      background: var(--select-soft);
+    }
+  }
+
+  .section-list-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+
+  .section-list-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .section-list-scroll::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 999px;
+  }
+
+  .week-strip-scroll {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .week-strip-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .week-strip-scroll > * {
+    scroll-snap-align: start;
+  }
+
+  @media (min-width: 880px) {
+    .week-strip-scroll {
+      scroll-snap-type: none;
+      overflow: visible;
+    }
+  }
+
+  @media (max-width: 879px) {
+    .mobile-bottom-sheet {
+      max-height: min(92dvh, 100%);
+      border-radius: 20px 20px 0 0;
+      margin-top: auto;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  .panel-scroll {
+    overflow-x: hidden;
+    overflow-y: visible;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  @media (min-width: 880px) {
+    .panel-scroll {
+      max-height: var(--list-max-h);
+      overflow-y: auto;
+    }
+  }
+
+  /* Nested list scroll only when parent locks height (desktop panels). */
+  .section-list-scroll {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: visible;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  @media (min-width: 880px) {
+    .section-list-scroll.section-list-scroll--panel {
+      flex: 1 1 auto;
+      max-height: none;
+      overflow-y: auto;
+    }
+  }
+
+  .mobile-dock {
+    transition: opacity 0.18s ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mobile-dock {
+      transition: none;
+    }
+  }
+
+  .modal-backdrop {
+    animation: modal-backdrop-in 0.18s ease-out both;
+  }
+
+  .modal-backdrop.is-leaving {
+    animation: modal-backdrop-out 0.15s ease-in both;
+  }
+
+  .modal-panel {
+    animation: modal-panel-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .modal-panel.is-leaving {
+    animation: modal-panel-out 0.15s ease-in both;
+  }
 }
 
-body {
-  margin: 0;
-  min-height: 100dvh;
-  background:
-    radial-gradient(120% 80% at 50% -10%, #fffdf9 0%, transparent 55%),
-    linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
-  background-attachment: fixed;
-  color: var(--ink);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.45;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-h1,
-h2,
-h3,
-.font-display {
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+@keyframes modal-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
-.font-mono,
-.tabular-nums {
-  font-family: var(--font-number);
-  font-variant-numeric: tabular-nums;
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+@keyframes modal-panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
 }
 
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop,
+  .modal-backdrop.is-leaving,
+  .modal-panel,
+  .modal-panel.is-leaving {
+    animation: none !important;
+  }
 
-* {
-  box-sizing: border-box;
-}
-
-::selection {
-  background: var(--income-soft);
-  color: var(--ink);
+  .transition-soft,
+  .hover-lift,
+  .hover-lift:hover {
+    transition: none !important;
+    transform: none !important;
+  }
 }

@@ -24,3 +24,17 @@ export function suggestCategoryId(
 
   return { categoryId: null, isAuto: false };
 }
+
+/** Build a short pattern from title/note for user category memory (§5 v2). */
+export function extractCategoryPattern(title: string, note: string): string {
+  const raw = (note.trim() || title.trim()).toLowerCase();
+  if (!raw) return "";
+
+  const tokens = raw
+    .split(/[\s,.;:/|+-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+
+  if (tokens.length === 0) return raw.slice(0, 40).trim();
+  return tokens.slice(0, 2).join(" ");
+}

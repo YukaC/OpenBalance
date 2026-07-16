@@ -15,7 +15,7 @@ const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
   { value: "gasto", label: "Gasto" },
 ];
 
-export default function TransaccionesPage() {
+export default function TransaccionesView() {
   const hydrated = useFinanceStore((s) => s.hydrated);
   const selectedMonth = useFinanceStore((s) => s.selectedMonth);
   const transactions = useFinanceStore((s) => s.transactions);
@@ -36,24 +36,27 @@ export default function TransaccionesPage() {
   if (!hydrated) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <p className="text-[13px] text-[var(--ink-muted)]">Cargando…</p>
+        <p className="text-[13px] text-[var(--ink-soft)]">Cargando…</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 pb-8">
+    <div className="pb-4">
       <MonthNavigator />
 
-      <section className="space-y-4" aria-labelledby="movements-heading">
+      <section
+        className="space-y-4 rounded-[18px] bg-[var(--card)] p-5 shadow-[var(--shadow-card)] ring-1 ring-[var(--line)] min-[880px]:p-6"
+        aria-labelledby="movements-heading"
+      >
         <div className="flex items-baseline justify-between gap-3">
           <h2
             id="movements-heading"
-            className="font-display text-[22px] text-[var(--ink)]"
+            className="font-display text-[17px] font-semibold text-[var(--ink)]"
           >
             Movimientos
           </h2>
-          <p className="text-[13px] text-[var(--ink-muted)]">
+          <p className="text-[13px] text-[var(--ink-soft)]">
             {filtered.length}{" "}
             {filtered.length === 1 ? "registro" : "registros"}
           </p>
@@ -71,10 +74,10 @@ export default function TransaccionesPage() {
                 key={item.value}
                 type="button"
                 onClick={() => setTypeFilter(item.value)}
-                className={`rounded-[var(--radius-full)] px-3.5 py-1.5 text-[12.5px] transition-colors ${
+                className={`min-h-10 rounded-xl px-3.5 py-2 text-[12.5px] font-semibold transition-soft focus-visible:outline-none active:scale-[0.98] ${
                   active
-                    ? "bg-[var(--chip-active)] text-[var(--chip-active-text)]"
-                    : "bg-[var(--chip)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                    ? "is-selected-solid"
+                    : "bg-[var(--bg)] text-[var(--ink-soft)] hover:text-[var(--ink)]"
                 }`}
               >
                 {item.label}
@@ -85,16 +88,16 @@ export default function TransaccionesPage() {
 
         {filtered.length === 0 ? (
           <div className="space-y-4 border-t border-[var(--line)] pt-6 text-center">
-            <p className="font-display text-[22px] leading-snug text-[var(--ink)]">
+            <p className="font-display text-[20px] font-semibold leading-snug text-[var(--ink)]">
               No hay movimientos este mes
             </p>
-            <p className="mx-auto max-w-[28ch] text-[14px] text-[var(--ink-muted)]">
+            <p className="mx-auto max-w-[28ch] text-[14px] text-[var(--ink-soft)]">
               Cargá un ingreso o un gasto para empezar a ver tu ritmo.
             </p>
             <button
               type="button"
               onClick={() => openForm()}
-              className="inline-flex h-12 items-center justify-center rounded-[var(--radius-md)] bg-[var(--ink)] px-5 text-[14px] font-medium text-[var(--chip-active-text)] transition-opacity hover:opacity-90"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[var(--ink)] px-5 text-[14px] font-bold text-[var(--ink-contrast)] transition-soft hover:opacity-90 active:scale-[0.99]"
             >
               Agregar movimiento
             </button>
@@ -119,7 +122,7 @@ export default function TransaccionesPage() {
                     type="button"
                     aria-label={`Eliminar ${tx.title}`}
                     onClick={() => deleteTransaction(tx.id)}
-                    className="mt-3.5 flex h-10 w-8 shrink-0 items-center justify-center text-[18px] text-[var(--ink-faint)] transition-colors hover:text-[var(--danger)]"
+                    className="mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[20px] text-[var(--ink-faint)] transition-soft hover:bg-[var(--red-soft)] hover:text-[var(--red)] focus-visible:outline-none active:scale-95"
                   >
                     ×
                   </button>
