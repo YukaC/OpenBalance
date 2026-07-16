@@ -5,14 +5,27 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:mobile": "node scripts/build-mobile.mjs",
+    "cap:sync": "npx cap sync",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --import ./scripts/ts-resolve.mjs --experimental-strip-types --test src/lib/*.test.ts"
+    "test": "node --import ./scripts/ts-resolve.mjs --experimental-strip-types --test src/lib/*.test.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.4.2",
+    "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2",
     "next": "15.5.20",
+    "next-auth": "^5.0.0-beta.31",
+    "postgres": "^3.4.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "zustand": "^5.0.14"
@@ -20,9 +33,11 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "15.5.20",
     "tailwindcss": "^4",

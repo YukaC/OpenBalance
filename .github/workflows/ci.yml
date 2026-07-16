@@ -28,9 +28,17 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+        env:
+          # Stubs so Auth.js / Drizzle imports typecheck without a live DB
+          AUTH_SECRET: ci-typecheck-secret-not-for-production
+          DATABASE_URL: ""
 
       - name: Lint
         run: npm run lint
 
       - name: Build
         run: npm run build
+        env:
+          AUTH_SECRET: ci-build-secret-not-for-production
+          DATABASE_URL: ""
+          AUTH_URL: http://localhost:3000

@@ -1,12 +1,25 @@
 import type { NextConfig } from "next";
 
+function buildConnectSrc(): string {
+  const sources = new Set<string>(["'self'"]);
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (apiBase) {
+    try {
+      sources.add(new URL(apiBase).origin);
+    } catch {
+      // Ignore invalid URL — keep CSP on 'self' only.
+    }
+  }
+  return `connect-src ${Array.from(sources).join(" ")}`;
+}
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  buildConnectSrc(),
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
