@@ -13,6 +13,7 @@ import { TransactionRow } from "@/components/TransactionRow";
 import { WeekBreakdown } from "@/components/WeekBreakdown";
 import { useNavigateToSection } from "@/lib/section-nav";
 import {
+  averageWeeklyIncome,
   filterByMonth,
   filterByWeek,
   buildMonthSummary,
@@ -47,6 +48,11 @@ export default function ResumenView() {
         paydayWeekday,
       ),
     [transactions, categories, selectedMonth, paydayWeekday],
+  );
+
+  const weeklyAverageIncome = useMemo(
+    () => averageWeeklyIncome(transactions, selectedMonth),
+    [transactions, selectedMonth],
   );
 
   const extraordinaryExpense = useMemo(
@@ -116,7 +122,10 @@ export default function ResumenView() {
     <div className="flex flex-col gap-5 min-[880px]:gap-6">
       <div>
         <MonthNavigator />
-        <MonthBalance summary={summary} />
+        <MonthBalance
+          summary={summary}
+          weeklyAverageIncome={weeklyAverageIncome}
+        />
         <WeekBreakdown summary={summary} />
       </div>
 

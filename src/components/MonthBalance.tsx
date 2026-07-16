@@ -3,9 +3,13 @@ import type { MonthSummary } from "@/lib/summaries";
 
 interface MonthBalanceProps {
   summary: MonthSummary;
+  weeklyAverageIncome: number;
 }
 
-export function MonthBalance({ summary }: MonthBalanceProps) {
+export function MonthBalance({
+  summary,
+  weeklyAverageIncome,
+}: MonthBalanceProps) {
   const { balance, income, expense, comparison } = summary;
   const isPositive = balance >= 0;
   const deltaClass =
@@ -59,6 +63,14 @@ export function MonthBalance({ summary }: MonthBalanceProps) {
             amount={income}
             tone="income"
             className="text-[20px] font-semibold text-[var(--green)] min-[880px]:text-[24px]"
+          />
+        </p>
+        <p className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[12px] text-[var(--ink-soft)] min-[880px]:text-[12.5px]">
+          <span>Promedio semanal</span>
+          <Money
+            amount={weeklyAverageIncome}
+            tone="income"
+            className="text-[12px] font-medium text-[var(--green)] min-[880px]:text-[12.5px]"
           />
         </p>
       </div>
