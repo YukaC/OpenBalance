@@ -732,9 +732,9 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 | G1 Clasificador memoria | DONE | Threshold 2 en `classifier.ts` |
 | G2 Import PDF | DONE | `ImportPdfSection` + `pdfjs-dist` |
 | G3 Virtualización | DONE | `@tanstack/react-virtual` en Transacciones |
-| G4 FX manual | TODO | — |
+| G4 FX manual | DONE | Config + Resumen equivalente; disclaimer si falta tasa |
 | G5 Ranking keywords | DONE | Gana keyword más larga |
-| G6 Ingreso auto-proyección | PARTIAL | `projectRecurringIncomeToMonth` + tests; no cableado a UI/store |
+| G6 Ingreso auto-proyección | DONE | `projectRecurringIncomeToMonth` + materialize con confirmación en Resumen |
 | G7 Cadencia biweekly | DONE | En `recurring-expense.ts` |
 
 ### Fase J — UX / a11y
