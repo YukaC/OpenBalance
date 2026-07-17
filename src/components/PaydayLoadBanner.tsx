@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   maybeNotifyPaydayLoad,
   shouldShowPaydayLoadReminder,
+  syncNativePaydayNotification,
 } from "@/lib/payday-reminder";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -46,6 +47,15 @@ export function PaydayLoadBanner() {
     paydayWeekday,
     shouldRemindPaydayLoad,
   ]);
+
+  // Keep native weekly schedule in sync even if Config is never opened (E3).
+  useEffect(() => {
+    if (!hydrated) return;
+    void syncNativePaydayNotification(
+      paydayWeekday,
+      Boolean(shouldRemindPaydayLoad),
+    );
+  }, [hydrated, paydayWeekday, shouldRemindPaydayLoad]);
 
   useEffect(() => {
     if (!shouldShow) return;

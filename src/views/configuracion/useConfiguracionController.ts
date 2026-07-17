@@ -15,6 +15,7 @@ import { todayIso } from "@/lib/dates";
 import type { CurrencyCode } from "@/lib/format";
 import { METHOD_LABELS, parseMoneyInput } from "@/lib/format";
 import {
+  getNativePaydayPermission,
   requestNativePaydayPermission,
   syncNativePaydayNotification,
 } from "@/lib/payday-reminder";
@@ -26,6 +27,7 @@ import {
   verifyPin,
 } from "@/lib/pin-lock";
 import { initialsFromName } from "@/lib/profile-setup";
+import type { Weekday } from "@/lib/types";
 import { touchFinancePersist, useFinanceStore } from "@/store/finance-store";
 
 export type ConfigConfirmPending =
@@ -135,16 +137,45 @@ export function useConfiguracionController() {
   }, [hydrated, profile.paydayWeekday, profile.shouldRemindPaydayLoad]);
 
   useEffect(() => {
-    if (typeof Notification === "undefined") {
+    if (!hydrated) return;
+    let isCancelled = false;
+
+    async function refreshNotificationPermission() {
       if (isRunningInNativeApp()) {
+        const native = await getNativePaydayPermission();
+        if (isCancelled) return;
+        if (native === "granted") {
+          setNotificationPermission("granted");
+          return;
+        }
+        if (native === "denied") {
+          setNotificationPermission("denied");
+          return;
+        }
         setNotificationPermission("default");
-      } else {
-        setNotificationPermission("unsupported");
+        return;
       }
-      return;
+
+      if (typeof Notification === "undefined") {
+        setNotificationPermission("unsupported");
+        return;
+      }
+      setNotificationPermission(Notification.permission);
     }
-    setNotificationPermission(Notification.permission);
-  }, [profile.shouldRemindPaydayLoad]);
+
+    void refreshNotificationPermission();
+    return () => {
+      isCancelled = true;
+    };
+  }, [hydrated, profile.shouldRemindPaydayLoad]);
+
+  function handleSetPayday(weekday: Weekday) {
+    setPayday(weekday);
+    void syncNativePaydayNotification(
+      weekday,
+      Boolean(useFinanceStore.getState().profile.shouldRemindPaydayLoad),
+    );
+  }
 
   function handleSaveName() {
     const trimmed = name.trim();
@@ -494,7 +525,7 @@ export function useConfiguracionController() {
     csvInputRef,
     backupInputRef,
     updateProfile,
-    setPayday,
+    setPayday: handleSetPayday,
     handleSaveName,
     handleSaveEmail,
     handleExportCsv,

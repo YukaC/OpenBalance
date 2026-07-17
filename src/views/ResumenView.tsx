@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { BudgetAlertBanner } from "@/components/BudgetAlertBanner";
+import { BudgetProgress } from "@/components/BudgetProgress";
 import { CategorySpendAlert } from "@/components/CategorySpendAlert";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HormigaDrainNote } from "@/components/HormigaDrainNote";
@@ -19,6 +20,7 @@ import { getMonthTransactions } from "@/lib/month-index";
 import { useNavigateToSection } from "@/lib/section-nav";
 import {
   filterByPayWeek,
+  buildBudgetProgress,
   buildMonthSummary,
   computeInstallmentDebt,
   findBudgetAlerts,
@@ -189,6 +191,36 @@ export default function ResumenView() {
       summaryCurrency,
       monthReferenceToday,
       prefilteredMonthTransactions,
+    ],
+  );
+
+  const budgetProgress = useMemo(
+    () =>
+      buildBudgetProgress(
+        transactions,
+        categories,
+        budgets,
+        selectedMonth,
+        paydayWeekday,
+        summaryCurrency,
+        {
+          // Default pay-weeks; pass "calendarMonth" when Fase M wires payCadence.
+          periodMode: "payWeeks",
+          referenceToday: monthReferenceToday,
+          prefilteredMonthTransactions,
+          weeks: summary.weeks,
+        },
+      ),
+    [
+      transactions,
+      categories,
+      budgets,
+      selectedMonth,
+      paydayWeekday,
+      summaryCurrency,
+      monthReferenceToday,
+      prefilteredMonthTransactions,
+      summary.weeks,
     ],
   );
 
@@ -449,6 +481,8 @@ export default function ResumenView() {
       </section>
 
       <WeekBreakdown summary={summary} />
+
+      <BudgetProgress rows={budgetProgress} currency={summaryCurrency} />
 
       {installmentDebt.length > 0 ? (
         <section

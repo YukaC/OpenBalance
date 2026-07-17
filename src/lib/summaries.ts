@@ -676,6 +676,172 @@ export interface BudgetAlert {
 }
 
 /**
+ * How budget spend is measured for the month.
+ * Additive for Fase M: pass `"calendarMonth"` when payCadence is monthly
+ * without reading UserProfile here.
+ */
+export type BudgetPeriodMode = "payWeeks" | "calendarMonth";
+
+export type BudgetProgressLevel = "ok" | BudgetAlertLevel;
+
+export interface BudgetWeekSpend {
+  index: number;
+  label: string;
+  weekIso: string;
+  spent: number;
+}
+
+export interface BudgetProgressRow {
+  budget: Budget;
+  category: Category;
+  spent: number;
+  amountLimit: number;
+  ratio: number;
+  percentUsed: number;
+  level: BudgetProgressLevel;
+  periodMode: BudgetPeriodMode;
+  /** Per pay-week spend; empty when `periodMode === "calendarMonth"`. */
+  weeks: BudgetWeekSpend[];
+}
+
+function resolveBudgetMonthTransactions(
+  transactions: Transaction[],
+  monthKey: string,
+  paydayWeekday: Weekday,
+  currency: "ARS" | "USD" | undefined,
+  periodMode: BudgetPeriodMode,
+  referenceToday: Date,
+  prefilteredMonthTransactions?: Transaction[],
+): Transaction[] {
+  if (prefilteredMonthTransactions) return prefilteredMonthTransactions;
+  if (periodMode === "calendarMonth") {
+    return filterByMonth(transactions, monthKey, currency, paydayWeekday);
+  }
+  return filterByMonthPayWeeks(
+    transactions,
+    monthKey,
+    referenceToday,
+    paydayWeekday,
+    currency,
+  );
+}
+
+function sumCategorySpendInRange(
+  transactions: Transaction[],
+  categoryId: string,
+  weekStart: Date,
+  weekEnd: Date,
+): number {
+  let total = 0;
+  for (const item of transactions) {
+    if (!isActive(item)) continue;
+    if (isTransferLeg(item)) continue;
+    if (item.type !== "gasto" || item.categoryId !== categoryId) continue;
+    const date = parseISO(item.date);
+    if (!isWithinInterval(date, { start: weekStart, end: weekEnd })) continue;
+    total += item.amount;
+  }
+  return total;
+}
+
+/**
+ * Progress bars for active month budgets, with optional pay-week breakdown.
+ * Default `periodMode` is `"payWeeks"` (current product model). Pass
+ * `"calendarMonth"` when Fase M enables monthly cadence — no UserProfile coupling.
+ */
+export function buildBudgetProgress(
+  transactions: Transaction[],
+  categories: Category[],
+  budgets: Budget[],
+  monthKey: string,
+  paydayWeekday: Weekday = "viernes",
+  currency?: "ARS" | "USD",
+  options?: {
+    periodMode?: BudgetPeriodMode;
+    referenceToday?: Date;
+    prefilteredMonthTransactions?: Transaction[];
+    /** Reuse `buildMonthSummary.weeks` when available (payWeeks mode). */
+    weeks?: Array<
+      Pick<MonthWeekSlice, "index" | "label" | "weekIso" | "start" | "end">
+    >;
+    /** Default true for payWeeks; alerts can skip week slices. */
+    includeWeekBreakdown?: boolean;
+  },
+): BudgetProgressRow[] {
+  const periodMode = options?.periodMode ?? "payWeeks";
+  const referenceToday = options?.referenceToday ?? getAppToday();
+  const shouldIncludeWeekBreakdown =
+    options?.includeWeekBreakdown ?? periodMode === "payWeeks";
+  const monthBudgets = budgets.filter(
+    (budget) => isActive(budget) && budget.month === monthKey,
+  );
+  if (monthBudgets.length === 0) return [];
+
+  const monthTx = resolveBudgetMonthTransactions(
+    transactions,
+    monthKey,
+    paydayWeekday,
+    currency,
+    periodMode,
+    referenceToday,
+    options?.prefilteredMonthTransactions,
+  );
+
+  const spentByCategory = new Map<string, number>();
+  for (const item of monthTx) {
+    if (isTransferLeg(item)) continue;
+    if (item.type !== "gasto" || !item.categoryId) continue;
+    spentByCategory.set(
+      item.categoryId,
+      (spentByCategory.get(item.categoryId) ?? 0) + item.amount,
+    );
+  }
+
+  const weekSlices =
+    periodMode === "payWeeks" && shouldIncludeWeekBreakdown
+      ? (options?.weeks ??
+        getMonthWorkWeeks(monthKey, referenceToday, paydayWeekday))
+      : [];
+  const categoryById = new Map(
+    categories.filter(isActive).map((category) => [category.id, category]),
+  );
+
+  const rows: BudgetProgressRow[] = [];
+  for (const budget of monthBudgets) {
+    if (budget.amountLimit <= 0) continue;
+    const category = categoryById.get(budget.categoryId);
+    if (!category) continue;
+    const spent = spentByCategory.get(budget.categoryId) ?? 0;
+    const ratio = spent / budget.amountLimit;
+    const weeks: BudgetWeekSpend[] = weekSlices.map((week) => ({
+      index: week.index,
+      label: week.label,
+      weekIso: week.weekIso,
+      spent: sumCategorySpendInRange(
+        monthTx,
+        budget.categoryId,
+        week.start,
+        week.end,
+      ),
+    }));
+
+    rows.push({
+      budget,
+      category,
+      spent,
+      amountLimit: budget.amountLimit,
+      ratio,
+      percentUsed: Math.round(ratio * 100),
+      level: ratio >= 1 ? "exceeded" : ratio >= 0.8 ? "warning" : "ok",
+      periodMode,
+      weeks,
+    });
+  }
+
+  return rows.sort((a, b) => b.ratio - a.ratio);
+}
+
+/**
  * Budgets for the month where spend is ≥ 80% (warning) or ≥ 100% (exceeded).
  */
 export function findBudgetAlerts(
@@ -686,42 +852,32 @@ export function findBudgetAlerts(
   paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
   prefilteredMonthTransactions?: Transaction[],
+  /** Optional; defaults to pay-weeks. Ready for Fase M calendar mode. */
+  periodMode: BudgetPeriodMode = "payWeeks",
 ): BudgetAlert[] {
-  const monthBudgets = budgets.filter(
-    (budget) => isActive(budget) && budget.month === monthKey,
-  );
-  if (monthBudgets.length === 0) return [];
-
-  const spentByCategory = sumExpenseByCategory(
+  const progress = buildBudgetProgress(
     transactions,
+    categories,
+    budgets,
     monthKey,
     paydayWeekday,
     currency,
-    getAppToday(),
-    prefilteredMonthTransactions,
-  );
-  const categoryById = new Map(
-    categories.filter(isActive).map((category) => [category.id, category]),
+    {
+      periodMode,
+      prefilteredMonthTransactions,
+      includeWeekBreakdown: false,
+    },
   );
 
-  const alerts: BudgetAlert[] = [];
-  for (const budget of monthBudgets) {
-    if (budget.amountLimit <= 0) continue;
-    const category = categoryById.get(budget.categoryId);
-    if (!category) continue;
-    const spent = spentByCategory.get(budget.categoryId) ?? 0;
-    const ratio = spent / budget.amountLimit;
-    if (ratio < 0.8) continue;
-    alerts.push({
-      budget,
-      category,
-      spent,
-      amountLimit: budget.amountLimit,
-      ratio,
-      percentUsed: Math.round(ratio * 100),
-      level: ratio >= 1 ? "exceeded" : "warning",
-    });
-  }
-
-  return alerts.sort((a, b) => b.ratio - a.ratio);
+  return progress
+    .filter((row) => row.level !== "ok")
+    .map((row) => ({
+      budget: row.budget,
+      category: row.category,
+      spent: row.spent,
+      amountLimit: row.amountLimit,
+      ratio: row.ratio,
+      percentUsed: row.percentUsed,
+      level: row.level,
+    }));
 }
