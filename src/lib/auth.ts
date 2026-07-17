@@ -6,6 +6,8 @@ import { users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth-password";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Explicit so missing Vercel env fails clearly instead of opaque 500s.
+  secret: process.env.AUTH_SECRET,
   trustHost: true,
   session: { strategy: "jwt" },
   providers: [

@@ -257,6 +257,16 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     return <AppGateLoading />;
   }
 
+  // Cloud auth first when enabled — never show onboarding before register/login.
+  if (authEnabled) {
+    if (sessionStatus === "loading") {
+      return <AppGateLoading />;
+    }
+    if (sessionStatus === "unauthenticated") {
+      return <AuthScreen />;
+    }
+  }
+
   if (needsProfileSetup(profile)) {
     return <OnboardingScreen />;
   }
@@ -269,16 +279,6 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
         }}
       />
     );
-  }
-
-  // Cloud auth gate — only when explicitly enabled. Local-only mode skips this.
-  if (authEnabled) {
-    if (sessionStatus === "loading") {
-      return <AppGateLoading />;
-    }
-    if (sessionStatus === "unauthenticated") {
-      return <AuthScreen />;
-    }
   }
 
   const paydayLabel = WEEKDAY_LABELS[profile.paydayWeekday] ?? profile.paydayWeekday;
