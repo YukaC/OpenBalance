@@ -7,6 +7,7 @@ import {
   enableBiometricUnlock,
   isBiometricHardwareAvailable,
   isBiometricUnlockEnabled,
+  syncBiometricStoredPin,
 } from "@/lib/biometric-unlock";
 import { parseTransactionsCsv, buildTransactionsCsv } from "@/lib/csv-io";
 import { isRunningInNativeApp } from "@/lib/device";
@@ -386,6 +387,10 @@ export function useConfiguracionController() {
     setIsSavingPin(true);
     try {
       await setPin(newPin);
+      // Keep biometric unlock working after a PIN change (same device key path).
+      if (biometricEnabled) {
+        await syncBiometricStoredPin(newPin);
+      }
       // setPin loads session key — rewrite finance blob as ciphertext.
       touchFinancePersist();
       setPinEnabled(true);

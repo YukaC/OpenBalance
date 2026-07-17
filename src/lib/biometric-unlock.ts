@@ -1,7 +1,13 @@
 /**
  * Optional biometric unlock (S4) for Capacitor.
- * Delegates real crypto to the PIN-derived session key (unlockWithPin).
- * Falls back to a no-op stub when the plugin is unavailable.
+ *
+ * Uses `@aparajita/capacitor-biometric-auth` (already in package.json — not
+ * `@capacitor/biometric`). Web and missing-plugin paths no-op safely.
+ * Real crypto still comes from the PIN-derived session key via unlockWithPin.
+ *
+ * After a successful biometric prompt we read the stored PIN from Preferences
+ * (native) / localStorage (fallback) and call unlockWithPin — the PIN never
+ * leaves the device and is never sent to the server.
  */
 
 import { isRunningInNativeApp } from "@/lib/device";
@@ -111,6 +117,15 @@ export async function enableBiometricUnlock(pin: string): Promise<boolean> {
 export async function disableBiometricUnlock(): Promise<void> {
   await removePref(BIOMETRIC_ENABLED_KEY);
   await removePref(BIOMETRIC_PIN_KEY);
+}
+
+/**
+ * After a PIN change, keep the stored biometric PIN in sync without re-prompting.
+ * No-ops when biometrics are not enabled.
+ */
+export async function syncBiometricStoredPin(pin: string): Promise<void> {
+  if (!(await isBiometricUnlockEnabled())) return;
+  await writePref(BIOMETRIC_PIN_KEY, pin);
 }
 
 /**

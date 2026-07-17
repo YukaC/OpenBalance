@@ -203,8 +203,10 @@ PR: `chore/backend-hardening` (agrupar H1, H5, H6, H7, H8 — bajo esfuerzo) + `
 - Sin PIN configurado: comportamiento actual (opcional); documentar que sin PIN = sin cifrado.
 
 ### S4. Biometría como upgrade opcional (Android/iOS, post-Capacitor)
-- Plugin `@capacitor/biometric` (o similar — **pedir OK**) para desbloquear con huella/Face ID en vez de tipear el PIN cada vez, delegando igual en la clave derivada del PIN (S1) para el cifrado real.
-- Solo aplica al build nativo (Capacitor); en web sigue siendo PIN.
+- Plugin: `@aparajita/capacitor-biometric-auth` (ya en `package.json`; alternativa `@capacitor/biometric` descartada).
+- Desbloqueo con huella/Face ID en vez de tipear el PIN cada vez; el cifrado real sigue delegando en la clave derivada del PIN (S1) vía `unlockWithPin`.
+- UI: toggle en `PinSection` / Configuración; auto-prompt + botón en `PinUnlockScreen`.
+- Solo aplica al build nativo (Capacitor); en web / sin plugin → no-op seguro (`biometric-unlock.ts`).
 - **Done when:** en Android/iOS, "Desbloquear con huella" pide el PIN una vez y después ofrece biometría.
 
 ### Entregable
@@ -653,7 +655,7 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 | S1 AES-GCM + PBKDF2 | DONE | `crypto-store.ts` |
 | S2 IndexedDB | DONE | `encrypted-storage.ts` |
 | S3 Unlock cifra | DONE | PIN deriva sesión en `pin-lock.ts` |
-| S4 Biometría | TODO | Sin plugin Capacitor |
+| S4 Biometría | DONE | `@aparajita/capacitor-biometric-auth` + `biometric-unlock.ts` |
 
 ### Fase O — Offline PWA
 | Ítem | Estado | Nota |
