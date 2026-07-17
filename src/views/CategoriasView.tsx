@@ -10,6 +10,7 @@ import { formatMonthName } from "@/lib/dates";
 import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { formatMoney, parseMoneyInput } from "@/lib/format";
+import { getMonthTransactions } from "@/lib/month-index";
 import { sumExpenseByCategory } from "@/lib/summaries";
 import type { Budget, Category, CategoryKind, Transaction, UserCategoryRule } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
@@ -44,7 +45,6 @@ export default function CategoriasView() {
   const setBudget = useFinanceStore((s) => s.setBudget);
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
-  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const showToast = useToastStore((s) => s.showToast);
 
   const [name, setName] = useState("");
@@ -83,6 +83,15 @@ export default function CategoriasView() {
     return map;
   }, [budgets, selectedMonth]);
 
+  const prefilteredMonthTransactions = useMemo(
+    () =>
+      getMonthTransactions(transactions, selectedMonth, {
+        paydayWeekday,
+        currency,
+      }),
+    [transactions, selectedMonth, paydayWeekday, currency],
+  );
+
   const spentByCategoryId = useMemo(
     () =>
       sumExpenseByCategory(
@@ -91,10 +100,15 @@ export default function CategoriasView() {
         paydayWeekday,
         currency,
         undefined,
-        undefined,
-        payCadence ?? "monthly",
+        prefilteredMonthTransactions,
       ),
-    [transactions, selectedMonth, paydayWeekday, payCadence, currency],
+    [
+      transactions,
+      selectedMonth,
+      paydayWeekday,
+      currency,
+      prefilteredMonthTransactions,
+    ],
   );
 
   const transactionCountByCategoryId = useMemo(() => {

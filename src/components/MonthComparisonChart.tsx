@@ -15,6 +15,8 @@ import { useFinanceStore } from "@/store/finance-store";
 interface MonthComparisonChartProps {
   transactions: Transaction[];
   monthKey: string;
+  /** I1: reuse Resumen's current-month pay-week slice when available. */
+  prefilteredMonthTransactions?: Transaction[];
 }
 
 type MetricKey = "income" | "expense" | "balance";
@@ -74,10 +76,10 @@ function formatDeltaCell(
 export function MonthComparisonChart({
   transactions,
   monthKey,
+  prefilteredMonthTransactions,
 }: MonthComparisonChartProps) {
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
-  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const prevKey = previousMonthKey(monthKey);
   const previousLabel = formatMonthName(prevKey);
   const currentLabel = formatMonthName(monthKey);
@@ -94,16 +96,15 @@ export function MonthComparisonChart({
   }, []);
 
   const { rows, hasComparableData } = useMemo(() => {
-    const cadence = payCadence ?? "monthly";
-    const currentTx = getMonthTransactions(transactions, monthKey, {
-      paydayWeekday,
-      currency,
-      payCadence: cadence,
-    });
+    const currentTx =
+      prefilteredMonthTransactions ??
+      getMonthTransactions(transactions, monthKey, {
+        paydayWeekday,
+        currency,
+      });
     const previousTx = getMonthTransactions(transactions, prevKey, {
       paydayWeekday,
       currency,
-      payCadence: cadence,
     });
 
     const currentIncome = sumByType(currentTx, "ingreso", currency);
@@ -139,7 +140,14 @@ export function MonthComparisonChart({
       previousExpense !== 0;
 
     return { rows: nextRows, hasComparableData: hasData };
-  }, [transactions, monthKey, prevKey, currency, paydayWeekday, payCadence]);
+  }, [
+    transactions,
+    monthKey,
+    prevKey,
+    currency,
+    paydayWeekday,
+    prefilteredMonthTransactions,
+  ]);
 
   if (!hasComparableData) return null;
 

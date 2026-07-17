@@ -1,5 +1,6 @@
 "use client";
 
+import { isWithinInterval, parseISO } from "date-fns";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { BudgetAlertBanner } from "@/components/BudgetAlertBanner";
@@ -18,7 +19,6 @@ import { FOCUS_RING } from "@/lib/focus-ring";
 import { getMonthTransactions } from "@/lib/month-index";
 import { useNavigateToSection } from "@/lib/section-nav";
 import {
-  filterByPayWeek,
   buildMonthSummary,
   computeInstallmentDebt,
   findBudgetAlerts,
@@ -304,27 +304,21 @@ export default function ResumenView() {
     return summary.weeks.find((week) => week.isCurrent) ?? summary.weeks[0];
   }, [summary.weeks, selectedWeekIso]);
 
+  // Slice from the same pay-week month set (already projected); do not
+  // re-scan the full ledger with filterByPayWeek.
   const weekTransactions = useMemo(() => {
     if (!focusedWeek) return [];
-    return filterByPayWeek(
-      transactions,
-      focusedWeek.start,
-      focusedWeek.end,
-      summaryCurrency,
-      paydayWeekday,
-    )
-      .filter((tx) =>
-        accountFilter === "all" ? true : tx.accountId === accountFilter,
-      )
+    return prefilteredMonthTransactions
+      .filter((tx) => {
+        const date = parseISO(tx.date);
+        return isWithinInterval(date, {
+          start: focusedWeek.start,
+          end: focusedWeek.end,
+        });
+      })
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [
-    transactions,
-    focusedWeek,
-    summaryCurrency,
-    paydayWeekday,
-    accountFilter,
-  ]);
+  }, [prefilteredMonthTransactions, focusedWeek]);
 
   const categoriesById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -634,6 +628,9 @@ export default function ResumenView() {
         <MonthComparisonChart
           transactions={transactions}
           monthKey={selectedMonth}
+          prefilteredMonthTransactions={
+            accountFilter === "all" ? prefilteredMonthTransactions : undefined
+          }
         />
 
         <div className="ledger-panel p-4 min-[880px]:p-5">

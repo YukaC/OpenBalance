@@ -79,7 +79,6 @@ export default function TransaccionesView() {
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
-  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const defaultCurrency = useFinanceStore((s) => s.profile.defaultCurrency);
   const accounts = useFinanceStore((s) => s.accounts);
   const openForm = useFinanceStore((s) => s.openForm);
@@ -189,9 +188,8 @@ export default function TransaccionesView() {
       getMonthTransactions(transactions, selectedMonth, {
         paydayWeekday,
         currency: defaultCurrency,
-        payCadence: payCadence ?? "monthly",
       }),
-    [transactions, selectedMonth, paydayWeekday, payCadence, defaultCurrency],
+    [transactions, selectedMonth, paydayWeekday, defaultCurrency],
   );
 
   const filtered = useMemo(() => {

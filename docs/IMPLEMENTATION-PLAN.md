@@ -702,7 +702,7 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 ### Fase I — Performance
 | Ítem | Estado | Nota |
 |------|--------|------|
-| I1 Índice mensual | PARTIAL | API `prefilteredMonthTransactions`; Resumen no la usa aún |
+| I1 Índice mensual | DONE | `getMonthTransactions` + slice reusado en Resumen/Categorías/chart/lista |
 | I2 Persist async | DONE | Adapter async IDB (S2) |
 | I3 Code-split forms | DONE | `dynamic()` en `AppShell` |
 | I4 Debounce search | DONE | ~150–200ms en Transacciones |
