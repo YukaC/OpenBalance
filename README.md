@@ -1,6 +1,6 @@
 # OpenBalance
 
-App de finanzas personales pensada para quien cobra **por semana** y decide **por mes**.
+App de finanzas personales **mensual primero**: el mes calendario es el marco de decisión (sueldo fijo, presupuesto, saldo). Quien cobra por semana puede activar un **modo cobro semanal** opcional (pay-weeks) — dirección de producto en [Fase M del plan](./docs/IMPLEMENTATION-PLAN.md); hoy el código sigue anclado a semanas de pago.
 
 Cargá ingresos y gastos con poca fricción, clasificá por keywords y mirá el resumen del mes en segundos.
 
@@ -64,16 +64,20 @@ npm run dev
 
 | Ruta | Qué hace |
 |------|----------|
-| `/` | Resumen del mes: balance, semanas de cobro, movimientos de la semana |
+| `/` | Resumen del mes: balance, desglose por semanas de cobro, movimientos |
 | `/transacciones` | Listado filtrable |
 | `/categorias` | Categorías, keywords y presupuestos |
-| `/configuracion` | Perfil, cuentas, cobro, PIN, sync, backup/CSV, descargar app (mobile web) |
+| `/configuracion` | Perfil, cuentas, día de cobro, PIN, sync, backup/CSV, descargar app (mobile web) |
 
 La ruta `/semanas` redirige a `/` (unificada en el resumen).
 
 ## Modelo
 
-Cada transacción guarda fecha real y campos derivados (`weekIso`, `month`). Los totales del mes usan **semanas de pago** (día de cobro configurable), no solo el mes calendario.
+Cada transacción guarda fecha real y campos derivados (`weekIso`, `month`).
+
+**Hoy en código:** los totales del mes en Resumen/Transacciones usan **semanas de pago** (día de la semana de cobro configurable).
+
+**Dirección (Fase M):** default **mes calendario**; modo **cobro semanal** opcional para quien vive en pay-weeks. Ver plan de implementación.
 
 Onboarding local en la primera visita. PIN opcional: deriva una clave local (PBKDF2 + AES-GCM) y cifra el blob en IndexedDB; el PIN nunca viaja al servidor. Sin PIN = almacenamiento en claro. Con auth activado: registro/login antes de usar sync.
 

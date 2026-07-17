@@ -34,7 +34,8 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "OpenBalance",
-  description: "OpenBalance — finanzas personales, resumen semanal y mensual",
+  description:
+    "OpenBalance — finanzas personales, resumen mensual primero (modo cobro semanal opcional)",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
