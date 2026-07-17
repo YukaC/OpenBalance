@@ -125,6 +125,7 @@ export default function ConfiguracionView() {
         confirmPin={controller.confirmPin}
         setConfirmPin={controller.setConfirmPin}
         pinError={controller.pinError}
+        pinErrorField={controller.pinErrorField}
         pinMessage={controller.pinMessage}
         isSavingPin={controller.isSavingPin}
         onSavePin={controller.handleSavePin}

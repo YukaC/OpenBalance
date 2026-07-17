@@ -63,6 +63,9 @@ export function useConfiguracionController() {
   const [currentPin, setCurrentPin] = useState("");
   const [pinMessage, setPinMessage] = useState("");
   const [pinError, setPinError] = useState("");
+  const [pinErrorField, setPinErrorField] = useState<
+    "current" | "new" | "confirm" | null
+  >(null);
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [canUseBiometric, setCanUseBiometric] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -344,21 +347,29 @@ export function useConfiguracionController() {
     setImportMessage(null);
   }
 
-  async function handleSavePin() {
+  function clearPinFeedback() {
     setPinError("");
+    setPinErrorField(null);
     setPinMessage("");
+  }
+
+  async function handleSavePin() {
+    clearPinFeedback();
     if (!isValidPinFormat(newPin)) {
       setPinError("El PIN debe tener entre 4 y 6 dígitos.");
+      setPinErrorField("new");
       return;
     }
     if (newPin !== confirmPin) {
       setPinError("Los PIN no coinciden.");
+      setPinErrorField("confirm");
       return;
     }
     if (pinEnabled) {
       const isCurrentValid = await verifyPin(currentPin);
       if (!isCurrentValid) {
         setPinError("PIN actual incorrecto.");
+        setPinErrorField("current");
         return;
       }
     }
@@ -378,15 +389,16 @@ export function useConfiguracionController() {
   }
 
   async function handleDisablePin() {
-    setPinError("");
-    setPinMessage("");
+    clearPinFeedback();
     if (!isValidPinFormat(currentPin)) {
       setPinError("Ingresá el PIN actual (4–6 dígitos) para desactivarlo.");
+      setPinErrorField("current");
       return;
     }
     const didDisable = await disablePinWithVerification(currentPin);
     if (!didDisable) {
       setPinError("PIN actual incorrecto.");
+      setPinErrorField("current");
       return;
     }
     await disableBiometricUnlock();
@@ -401,10 +413,10 @@ export function useConfiguracionController() {
   }
 
   async function handleToggleBiometric(nextEnabled: boolean) {
-    setPinError("");
-    setPinMessage("");
+    clearPinFeedback();
     if (!pinEnabled) {
       setPinError("Activá un PIN antes de usar biometría.");
+      setPinErrorField(null);
       return;
     }
     setIsTogglingBiometric(true);
@@ -417,16 +429,19 @@ export function useConfiguracionController() {
       }
       if (!isValidPinFormat(currentPin)) {
         setPinError("Ingresá el PIN actual para activar biometría.");
+        setPinErrorField("current");
         return;
       }
       const isCurrentValid = await verifyPin(currentPin);
       if (!isCurrentValid) {
         setPinError("PIN actual incorrecto.");
+        setPinErrorField("current");
         return;
       }
       const didEnable = await enableBiometricUnlock(currentPin);
       if (!didEnable) {
         setPinError("No se pudo activar biometría en este dispositivo.");
+        setPinErrorField(null);
         return;
       }
       setBiometricEnabled(true);
@@ -473,6 +488,7 @@ export function useConfiguracionController() {
     setCurrentPin,
     pinMessage,
     pinError,
+    pinErrorField,
     isSavingPin,
     canUseBiometric,
     biometricEnabled,
