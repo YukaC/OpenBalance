@@ -82,16 +82,27 @@ Pushes to the production branch redeploy automatically.
 |----------|----------|--------|
 | `DATABASE_URL` | Yes (auth/sync) | Neon pooled URL + `sslmode=require` |
 | `AUTH_SECRET` | Yes | `openssl rand -base64 32` (can differ from local) |
-| `AUTH_URL` | Yes in prod | e.g. `https://your-app.vercel.app` |
+| `AUTH_URL` | Yes in prod | Canonical **site** URL, e.g. `https://your-app.vercel.app` — not the Capacitor WebView origin |
 | `NEXT_PUBLIC_AUTH_ENABLED` | Yes for login gate | `true` |
 | `NEXTAUTH_URL` | Optional | Legacy alias of `AUTH_URL` |
-| `NEXT_PUBLIC_API_BASE_URL` | Optional | Only if client ≠ API origin (Capacitor); also extends CSP `connect-src` |
+| `NEXT_PUBLIC_API_BASE_URL` | Required for Capacitor APK | Same origin as `AUTH_URL` (no trailing slash). Also extends CSP `connect-src` on web |
 | `NEXT_PUBLIC_ANDROID_DOWNLOAD_URL` | Optional | Mobile-web “Descargá la app” banner |
 | `NEXT_PUBLIC_IOS_DOWNLOAD_URL` | Optional | Same, iOS |
 | `RESEND_API_KEY` | Optional | Sends password-reset emails via Resend HTTP API (no npm package) |
 | `RESEND_FROM` | Optional | From address for Resend (default `OpenBalance <onboarding@resend.dev>`) |
 | `AUTH_DEV_RESET_URL` | Optional | `1` to include `resetUrl` in forgot-password API responses (also on in non-production) |
 | `SMTP_URL` | Optional | Reserved for later SMTP/Nodemailer; **not wired yet** |
+
+### Capacitor session recipe (C1)
+
+WebView origin ≠ Vercel → Auth.js cookies usually **do not** stick. Production recipe:
+
+1. **Vercel:** `AUTH_URL=https://your-app.vercel.app` + `AUTH_SECRET` + `NEXT_PUBLIC_AUTH_ENABLED=true` + `DATABASE_URL`.
+2. **Mobile build:** bake `NEXT_PUBLIC_API_BASE_URL=https://your-app.vercel.app` (and `NEXT_PUBLIC_AUTH_ENABLED=true`) into `pnpm build:mobile`.
+3. **Native login:** app calls `POST /api/auth/native-token`, stores JWT in `@capacitor/preferences`, syncs with `Authorization: Bearer`.
+4. **SameSite:** leave Auth.js defaults for web (`Lax` on HTTPS). Do **not** require `SameSite=None` for the APK — Bearer is the supported path. Optional cookie cross-site is documented in [MOBILE.md](./MOBILE.md) only as a non-default experiment.
+
+Smoke: APK → login → Configuración → **Sincronizar ahora** → Network shows `POST …/api/sync` with `Authorization: Bearer` and **200**.
 
 ### Password reset without email SaaS
 

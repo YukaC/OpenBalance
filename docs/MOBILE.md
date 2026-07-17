@@ -60,23 +60,39 @@ No commitear keystores ni passwords. Flujo típico en Android Studio:
 
 iOS: certificados/provisioning en Xcode / App Store Connect (fuera de este repo).
 
-## Auth nativa (C1) — cookies vs Bearer
+## Auth nativa (C1) — receta de sesión WebView
 
-En Capacitor el WebView tiene origen distinto al API de Vercel (`https://localhost` / `capacitor://` / scheme propio). Las cookies de sesión Auth.js **suelen no cruzar** ese origen.
+En Capacitor el WebView tiene origen distinto al API de Vercel (`https://localhost` / `capacitor://` / scheme propio). Las cookies de sesión Auth.js **suelen no cruzar** ese origen. OpenBalance **no depende** de cookies cross-site en native.
 
-### Qué hacer en Vercel (si probás cookies)
+### Receta (checklist)
 
-- `AUTH_URL=https://tu-app.vercel.app` (origen canónico del sitio, no el WebView).
-- Cookies de sesión con `Secure` + `SameSite=None` si alguna vez querés cookie cross-site (Auth.js / trustHost). En la práctica el path KISS de OpenBalance **no depende** de eso en native.
+| Paso | Dónde | Valor |
+| --- | --- | --- |
+| 1. Origen canónico Auth.js | Vercel (server) | `AUTH_URL=https://tu-app.vercel.app` — **nunca** el origin del WebView |
+| 2. Secreto JWT | Vercel (server) | `AUTH_SECRET` (mismo que firma el token nativo) |
+| 3. Gate de login | Build mobile (client) | `NEXT_PUBLIC_AUTH_ENABLED=true` |
+| 4. API remota | Build mobile (client) | `NEXT_PUBLIC_API_BASE_URL=https://tu-app.vercel.app` |
+| 5. Login nativo | App | `POST /api/auth/native-token` → JWT en Preferences |
+| 6. Sync | App → Vercel | `Authorization: Bearer <token>` + `credentials: "include"` |
 
-### Path KISS que usa la app nativa
+Código: `src/lib/native-auth.ts` (`loginNativeWithPassword`, `getSyncAuthHeaders`) + `src/lib/resolve-request-user.ts` (cookie **o** Bearer vía `getToken`).
+
+### AUTH_URL y SameSite (cerrado)
+
+| Entorno | Qué aplica |
+| --- | --- |
+| **Web (mismo origen)** | Cookies Auth.js normales. `AUTH_URL` = URL pública. SameSite por defecto de Auth.js (`Lax` en HTTPS) alcanza. |
+| **Capacitor WebView** | Path KISS = Bearer JWT. **No** hace falta `SameSite=None` ni cookie cross-site. |
+| **Cookies cross-site (opcional, no usado)** | Solo si algún día querés sesión por cookie desde el WebView: `Secure` + `SameSite=None` + `AUTH_URL` canónico + `trustHost` (ya `true` en `auth.ts`). Hoy es innecesario. |
+
+### Flujo nativo (detalle)
 
 1. Login/registro llama a `POST /api/auth/native-token` (email + password).
 2. El JWT cifrado (Auth.js `encode`, salt `authjs.session-token`) se guarda en `@capacitor/preferences` (fallback `localStorage`).
 3. `pushPullSync` envía `Authorization: Bearer <token>` además de `credentials: "include"`.
 4. `/api/sync` resuelve usuario por cookie **o** Bearer (`resolveRequestUserId` / `getToken`).
 
-En web el flujo sigue siendo Auth.js + cookies (`signIn`).
+En web el flujo sigue siendo Auth.js + cookies (`signIn`). Logout nativo: `clearNativeAuthToken()` (Preferences + localStorage).
 
 ## Banner “Descargá la app” (C3)
 

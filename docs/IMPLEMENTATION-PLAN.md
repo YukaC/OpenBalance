@@ -260,7 +260,7 @@ PR: `feat/password-reset-and-account-settings`
 ## Fase C — Android instalable (P1)
 
 ### C1. Sesión Capacitor ↔ Vercel
-- Cookies / `AUTH_URL` / SameSite; fallback JWT en Preferences + `Authorization` si hace falta.
+- Receta documentada: `AUTH_URL` canónico + `NEXT_PUBLIC_API_BASE_URL`; SameSite default en web; native = JWT Preferences + `Authorization: Bearer` (`native-auth.ts`). Ver `docs/MOBILE.md` / `docs/DEPLOY.md`.
 
 ### C2. Pipeline build
 - `pnpm build:mobile` → `cap:sync` → APK/AAB firmado.
@@ -671,7 +671,7 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 ### Fase C — Android
 | Ítem | Estado | Nota |
 |------|--------|------|
-| C1 Sesión WebView | PARTIAL | Docs/`API_BASE`; cookies SameSite no cerradas |
+| C1 Sesión WebView | DONE | Bearer+Preferences; receta AUTH_URL/SameSite en MOBILE/DEPLOY |
 | C2 Pipeline build | DONE | `build-mobile.mjs` + `cap:sync` |
 | C3 Banner download | DONE | `DownloadAppSection` + env URLs |
 
