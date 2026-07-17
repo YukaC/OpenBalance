@@ -5,6 +5,7 @@ import {
   IDLE_SYNC_MS,
   getIdleOnlineRetryDelayMs,
 } from "./auto-sync";
+import { KEEPALIVE_MAX_BODY_BYTES } from "./sync-client";
 
 describe("IDLE_ONLINE_RETRY_DELAYS_MS", () => {
   it("uses 2s → 8s → 30s backoff (3 retries capped)", () => {
@@ -35,5 +36,11 @@ describe("getIdleOnlineRetryDelayMs", () => {
 describe("IDLE_SYNC_MS", () => {
   it("is ten minutes", () => {
     assert.equal(IDLE_SYNC_MS, 10 * 60 * 1000);
+  });
+});
+
+describe("O4 keepalive leave flush threshold", () => {
+  it("keeps the safe chunk threshold at 50KB (below browser ~64KB cap)", () => {
+    assert.equal(KEEPALIVE_MAX_BODY_BYTES, 50_000);
   });
 });

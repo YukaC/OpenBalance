@@ -41,6 +41,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isBrowserOnline(): boolean {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
 /**
  * Pure helper: delay before retry attempt `retryIndex` (0 = first retry after failure).
  * Returns null when the index is out of range (attempts capped).
@@ -59,7 +63,7 @@ async function runSyncSafely(options?: {
   onlyIfDirty?: boolean;
 }): Promise<boolean> {
   if (isSyncInFlight) return false;
-  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+  if (!isBrowserOnline()) {
     return false;
   }
   if (options?.onlyIfDirty && !hasPendingLocalChanges()) {
@@ -92,7 +96,7 @@ async function syncWithBackoffRetries(options?: {
     if (delayMs == null) break;
     if (generation !== retrySyncGeneration) return false;
     if (activeSessionKey !== sessionKey) return false;
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    if (!isBrowserOnline()) {
       requestBackgroundSyncIfSupported();
       return false;
     }
@@ -101,7 +105,7 @@ async function syncWithBackoffRetries(options?: {
 
     if (generation !== retrySyncGeneration) return false;
     if (activeSessionKey !== sessionKey) return false;
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    if (!isBrowserOnline()) {
       requestBackgroundSyncIfSupported();
       return false;
     }
@@ -151,9 +155,28 @@ function requestBackgroundSyncIfSupported() {
 }
 
 /**
+ * Replay pending local mutations through the existing push/pull engine (O2).
+ * Shared by `online`, SW Background Sync postMessage, and visibility→visible
+ * so reconnect does not wait for the 10m idle timer. No second sync queue.
+ */
+function replayPendingMutations() {
+  if (!isAuthEnabled()) return;
+  if (activeSessionKey == null) return;
+  if (!hasPendingLocalChanges()) return;
+  if (!isBrowserOnline()) {
+    requestBackgroundSyncIfSupported();
+    return;
+  }
+  void syncWithBackoffRetries({ onlyIfDirty: true });
+}
+
+/**
  * Flush pending local edits when the user leaves / backgrounds the app.
  * No-op when clean — minimizes server hits on tab switches with no edits.
- * Keepalive is requested here; pushPullSync drops it if the body is too large (O4).
+ *
+ * O4: `pushPullSync({ keepalive: true })` chunks bodies >50KB into multiple
+ * keepalive POSTs. Background Sync remains a safety net for cancelled unload
+ * fetches or a single entity that alone exceeds the keepalive limit.
  */
 function flushPendingOnLeave() {
   if (!isAuthEnabled()) return;
@@ -172,15 +195,17 @@ function flushPendingOnLeave() {
 function onVisibilityChange() {
   if (document.visibilityState === "hidden") {
     flushPendingOnLeave();
+    return;
+  }
+  // Catch missed `online` while the tab was backgrounded (O2).
+  if (document.visibilityState === "visible") {
+    replayPendingMutations();
   }
 }
 
 /** Retry pending uploads as soon as the network comes back (A6 / O2). */
 function onOnline() {
-  if (!isAuthEnabled()) return;
-  if (activeSessionKey == null) return;
-  if (!hasPendingLocalChanges()) return;
-  void syncWithBackoffRetries({ onlyIfDirty: true });
+  replayPendingMutations();
 }
 
 function onStoreChanged(
@@ -201,7 +226,7 @@ function onStoreChanged(
     return;
   }
   scheduleIdleSync();
-  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+  if (!isBrowserOnline()) {
     requestBackgroundSyncIfSupported();
   }
 }
@@ -213,8 +238,7 @@ function onServiceWorkerMessage(event: MessageEvent) {
   if (data?.type !== SW_SYNC_MESSAGE_TYPE) {
     return;
   }
-  if (!hasPendingLocalChanges()) return;
-  void syncWithBackoffRetries({ onlyIfDirty: true });
+  replayPendingMutations();
 }
 
 function bindPageLeaveListeners() {
@@ -280,8 +304,9 @@ async function syncOnLoginWithRetry(sessionKey: string) {
  * Start automatic sync for an authenticated session:
  * - push/pull immediately on login (with short retries)
  * - push after IDLE_SYNC_MS quiet time only if dirty (with backoff retries)
- * - push on tab hide / page leave only if dirty (keepalive)
+ * - push on tab hide / page leave only if dirty (keepalive, chunked if >50KB)
  * - push when the browser comes back online if dirty (with backoff retries)
+ * - push when the tab becomes visible again if dirty (missed-online replay)
  * - optional Background Sync tag → SW postMessage → client retry
  */
 export function startAutoSync(sessionKey: string) {
