@@ -1,8 +1,8 @@
-import { getDay, parseISO } from "date-fns";
+import { endOfMonth, getDay, parseISO, startOfMonth } from "date-fns";
+import { getPayWeekBounds, isDayOfMonthDate, toMonthKey } from "./dates";
 import { isRunningInNativeApp } from "./device";
-import { getPayWeekBounds } from "./dates";
 import { isActive } from "./entity-lifecycle";
-import type { Transaction, Weekday } from "./types";
+import type { PayCadence, PaydayDayOfMonth, Transaction, Weekday } from "./types";
 
 const WEEKDAY_TO_NUMBER: Record<Weekday, number> = {
   domingo: 0,
@@ -27,41 +27,90 @@ const WEEKDAY_TO_CAPACITOR: Record<Weekday, number> = {
 
 export const PAYDAY_NATIVE_NOTIFICATION_ID = 42_001;
 
-export function isPaydayDate(
+export function isWeeklyPaydayDate(
   referenceDate: Date,
   paydayWeekday: Weekday,
 ): boolean {
   return getDay(referenceDate) === WEEKDAY_TO_NUMBER[paydayWeekday];
 }
 
-/**
- * True when reminders are on, today is payday, and the current pay week
- * still has no ingreso loaded.
- */
-export function shouldShowPaydayLoadReminder(
-  transactions: Transaction[],
+/** @deprecated Prefer isWeeklyPaydayDate or isPaydayForProfile. */
+export function isPaydayDate(
+  referenceDate: Date,
   paydayWeekday: Weekday,
-  shouldRemindPaydayLoad: boolean,
-  referenceDate: Date = new Date(),
 ): boolean {
-  if (!shouldRemindPaydayLoad) return false;
-  if (!isPaydayDate(referenceDate, paydayWeekday)) return false;
+  return isWeeklyPaydayDate(referenceDate, paydayWeekday);
+}
 
-  const { start, end } = getPayWeekBounds(referenceDate, paydayWeekday);
+export type PaydayReminderProfile = {
+  payCadence: PayCadence;
+  paydayWeekday: Weekday;
+  paydayDayOfMonth: PaydayDayOfMonth;
+  shouldRemindPaydayLoad: boolean;
+};
 
-  const hasIncomeThisWeek = transactions.some((item) => {
+/**
+ * True when today matches the user's configured payday
+ * (weekday for weekly, day-of-month for monthly — shared clamp with G6).
+ */
+export function isPaydayForProfile(
+  referenceDate: Date,
+  profile: Pick<
+    PaydayReminderProfile,
+    "payCadence" | "paydayWeekday" | "paydayDayOfMonth"
+  >,
+): boolean {
+  if (profile.payCadence === "monthly") {
+    return isDayOfMonthDate(referenceDate, profile.paydayDayOfMonth);
+  }
+  return isWeeklyPaydayDate(referenceDate, profile.paydayWeekday);
+}
+
+function hasIncomeInRange(
+  transactions: Transaction[],
+  start: Date,
+  end: Date,
+): boolean {
+  return transactions.some((item) => {
     if (!isActive(item)) return false;
     if (item.type !== "ingreso") return false;
     const date = parseISO(item.date);
     return date >= start && date <= end;
   });
+}
 
-  return !hasIncomeThisWeek;
+/**
+ * True when reminders are on, today is payday, and the current pay window
+ * (week or calendar month) still has no ingreso loaded.
+ */
+export function shouldShowPaydayLoadReminder(
+  transactions: Transaction[],
+  profile: PaydayReminderProfile,
+  referenceDate: Date = new Date(),
+): boolean {
+  if (!profile.shouldRemindPaydayLoad) return false;
+  if (!isPaydayForProfile(referenceDate, profile)) return false;
+
+  if (profile.payCadence === "monthly") {
+    const monthStart = startOfMonth(referenceDate);
+    const monthEnd = endOfMonth(referenceDate);
+    return !hasIncomeInRange(transactions, monthStart, monthEnd);
+  }
+
+  const { start, end } = getPayWeekBounds(
+    referenceDate,
+    profile.paydayWeekday,
+  );
+  return !hasIncomeInRange(transactions, start, end);
 }
 
 export const PAYDAY_NOTIFICATION_TITLE = "OpenBalance · Día de cobro";
-export const PAYDAY_NOTIFICATION_BODY =
+export const PAYDAY_NOTIFICATION_BODY_WEEKLY =
   "Todavía no cargaste el ingreso de esta semana.";
+export const PAYDAY_NOTIFICATION_BODY_MONTHLY =
+  "Todavía no cargaste el ingreso de este mes.";
+/** @deprecated Use PAYDAY_NOTIFICATION_BODY_WEEKLY. */
+export const PAYDAY_NOTIFICATION_BODY = PAYDAY_NOTIFICATION_BODY_WEEKLY;
 
 const PAYDAY_NOTIFY_STORAGE_KEY = "openbalance-payday-notify";
 
@@ -72,6 +121,7 @@ const PAYDAY_NOTIFY_STORAGE_KEY = "openbalance-payday-notify";
 export function maybeNotifyPaydayLoad(options?: {
   storageKey?: string;
   dayKey?: string;
+  body?: string;
 }): boolean {
   if (typeof window === "undefined" || typeof Notification === "undefined") {
     return false;
@@ -91,7 +141,7 @@ export function maybeNotifyPaydayLoad(options?: {
 
   try {
     new Notification(PAYDAY_NOTIFICATION_TITLE, {
-      body: PAYDAY_NOTIFICATION_BODY,
+      body: options?.body ?? PAYDAY_NOTIFICATION_BODY_WEEKLY,
       tag: `openbalance-payday-${dayKey}`,
     });
     return true;
@@ -119,14 +169,33 @@ export async function requestNativePaydayPermission(): Promise<boolean> {
   }
 }
 
+export type SyncNativePaydayOptions = {
+  payCadence: PayCadence;
+  paydayWeekday: Weekday;
+  paydayDayOfMonth: PaydayDayOfMonth;
+  shouldRemind: boolean;
+};
+
 /**
- * Schedule a weekly native reminder on the user's payday at 09:00 (E3).
+ * Schedule a native reminder on the user's payday at 09:00 (E3).
+ * Weekly → weekday schedule; monthly → day-of-month (0 → day 28 approx for last day).
  * Cancels the previous schedule first. No-op on web.
  */
 export async function syncNativePaydayNotification(
-  paydayWeekday: Weekday,
-  shouldRemind: boolean,
+  options: SyncNativePaydayOptions | Weekday,
+  shouldRemindLegacy?: boolean,
 ): Promise<void> {
+  // Back-compat: older callers passed (weekday, shouldRemind).
+  const resolved: SyncNativePaydayOptions =
+    typeof options === "string"
+      ? {
+          payCadence: "weekly",
+          paydayWeekday: options,
+          paydayDayOfMonth: 1,
+          shouldRemind: Boolean(shouldRemindLegacy),
+        }
+      : options;
+
   if (!isRunningInNativeApp()) return;
 
   try {
@@ -138,7 +207,7 @@ export async function syncNativePaydayNotification(
       notifications: [{ id: PAYDAY_NATIVE_NOTIFICATION_ID }],
     });
 
-    if (!shouldRemind) return;
+    if (!resolved.shouldRemind) return;
 
     const permission = await LocalNotifications.checkPermissions();
     if (permission.display !== "granted") {
@@ -146,23 +215,42 @@ export async function syncNativePaydayNotification(
       if (requested.display !== "granted") return;
     }
 
+    const body =
+      resolved.payCadence === "monthly"
+        ? PAYDAY_NOTIFICATION_BODY_MONTHLY
+        : PAYDAY_NOTIFICATION_BODY_WEEKLY;
+
+    const scheduleOn =
+      resolved.payCadence === "monthly"
+        ? {
+            // Capacitor has no "last day"; 0 → 28. Banner still uses clampDayOfMonth.
+            day:
+              resolved.paydayDayOfMonth <= 0
+                ? 28
+                : Math.min(28, resolved.paydayDayOfMonth),
+            hour: 9,
+            minute: 0,
+          }
+        : {
+            weekday: WEEKDAY_TO_CAPACITOR[resolved.paydayWeekday],
+            hour: 9,
+            minute: 0,
+          };
+
     await LocalNotifications.schedule({
       notifications: [
         {
           id: PAYDAY_NATIVE_NOTIFICATION_ID,
           title: PAYDAY_NOTIFICATION_TITLE,
-          body: PAYDAY_NOTIFICATION_BODY,
+          body,
           schedule: {
-            on: {
-              weekday: WEEKDAY_TO_CAPACITOR[paydayWeekday],
-              hour: 9,
-              minute: 0,
-            },
+            on: scheduleOn,
             allowWhileIdle: true,
           },
           extra: {
             deepLink: "openbalance://income",
             openIncome: true,
+            monthKey: toMonthKey(new Date()),
           },
         },
       ],

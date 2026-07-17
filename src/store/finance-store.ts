@@ -40,7 +40,9 @@ import type {
   Category,
   IncomeSource,
   LoadOrigin,
+  PayCadence,
   PaymentMethod,
+  PaydayDayOfMonth,
   Transaction,
   TransactionType,
   UserCategoryRule,
@@ -54,7 +56,9 @@ const BLANK_PROFILE: UserProfile = {
   name: "",
   email: "",
   defaultCurrency: "ARS",
+  payCadence: "monthly",
   paydayWeekday: "viernes",
+  paydayDayOfMonth: 1,
   initials: "??",
   isSetupComplete: false,
   defaultAccountId: "acc-principal",
@@ -168,6 +172,8 @@ interface FinanceState {
   updateIncomeSource: (id: string, patch: Partial<IncomeSource>) => void;
   updateProfile: (patch: Partial<UserProfile>) => void;
   setPayday: (weekday: Weekday) => void;
+  setPayCadence: (payCadence: PayCadence) => void;
+  setPaydayDayOfMonth: (dayOfMonth: PaydayDayOfMonth) => void;
   setBudget: (categoryId: string, month: string, amountLimit: number) => void;
   removeBudget: (id: string) => void;
   addAccount: (account: Omit<Account, "id">) => void;
@@ -657,6 +663,18 @@ export const useFinanceStore = create<FinanceState>()(
           profile: touch({ ...state.profile, paydayWeekday: weekday }),
           selectedWeekIso: null,
         })),
+      setPayCadence: (payCadence) =>
+        set((state) => ({
+          profile: touch({ ...state.profile, payCadence }),
+          selectedWeekIso: null,
+        })),
+      setPaydayDayOfMonth: (dayOfMonth) =>
+        set((state) => ({
+          profile: touch({
+            ...state.profile,
+            paydayDayOfMonth: Math.max(0, Math.min(28, Math.round(dayOfMonth))),
+          }),
+        })),
       setBudget: (categoryId, month, amountLimit) => {
         const roundedLimit = Math.max(0, Math.round(amountLimit));
         set((state) => {
@@ -791,11 +809,23 @@ export const useFinanceStore = create<FinanceState>()(
           payload.accounts.length > 0
             ? migrateEntitiesForSync(payload.accounts, nowIso)
             : DEFAULT_ACCOUNTS;
+        const incomingProfile = payload.profile as UserProfile & {
+          payCadence?: UserProfile["payCadence"];
+          paydayDayOfMonth?: number;
+        };
         const profile = ensureLifecycle(
           {
-            ...payload.profile,
+            ...incomingProfile,
+            payCadence:
+              incomingProfile.payCadence ??
+              (incomingProfile.isSetupComplete ||
+              incomingProfile.paydayWeekday !== "viernes" ||
+              Boolean(incomingProfile.shouldRemindPaydayLoad)
+                ? "weekly"
+                : "monthly"),
+            paydayDayOfMonth: incomingProfile.paydayDayOfMonth ?? 1,
             defaultAccountId:
-              payload.profile.defaultAccountId ?? accounts[0]?.id,
+              incomingProfile.defaultAccountId ?? accounts[0]?.id,
           },
           nowIso,
         );
@@ -932,6 +962,28 @@ export const useFinanceStore = create<FinanceState>()(
           state.profile = touch({
             ...state.profile,
             shouldRemindPaydayLoad: false,
+          });
+        }
+
+        // Fase M: backfill payCadence / paydayDayOfMonth for legacy local profiles.
+        const profileRecord = state.profile as UserProfile & {
+          payCadence?: PayCadence;
+          paydayDayOfMonth?: number;
+        };
+        if (profileRecord.payCadence === undefined) {
+          const hasCustomizedPayday =
+            state.profile.paydayWeekday !== "viernes" ||
+            Boolean(state.profile.shouldRemindPaydayLoad) ||
+            Boolean(state.profile.isSetupComplete);
+          state.profile = touch({
+            ...state.profile,
+            payCadence: hasCustomizedPayday ? "weekly" : "monthly",
+          });
+        }
+        if (profileRecord.paydayDayOfMonth === undefined) {
+          state.profile = touch({
+            ...state.profile,
+            paydayDayOfMonth: 1,
           });
         }
 

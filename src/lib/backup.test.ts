@@ -7,7 +7,9 @@ const validProfile = {
   name: "Test",
   email: "test@example.com",
   defaultCurrency: "ARS",
+  payCadence: "monthly",
   paydayWeekday: "viernes",
+  paydayDayOfMonth: 1,
   initials: "T",
   shouldRemindPaydayLoad: false,
 };

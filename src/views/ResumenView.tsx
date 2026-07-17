@@ -85,6 +85,7 @@ export default function ResumenView() {
   const repairTransactions = useFinanceStore((s) => s.repairTransactions);
   const setViewMode = useFinanceStore((s) => s.setViewMode);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
+  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const defaultCurrency = useFinanceStore((s) => s.profile.defaultCurrency);
   const monthlySavingsGoal = useFinanceStore(
     (s) => s.profile.monthlySavingsGoal,
@@ -128,6 +129,7 @@ export default function ResumenView() {
       referenceToday: monthReferenceToday,
       paydayWeekday,
       currency: summaryCurrency,
+      payCadence: payCadence ?? "monthly",
     });
     if (accountFilter === "all") return monthTx;
     return monthTx.filter((tx) => tx.accountId === accountFilter);
@@ -136,6 +138,7 @@ export default function ResumenView() {
     selectedMonth,
     monthReferenceToday,
     paydayWeekday,
+    payCadence,
     summaryCurrency,
     accountFilter,
   ]);
@@ -150,6 +153,7 @@ export default function ResumenView() {
         paydayWeekday,
         summaryCurrency,
         prefilteredMonthTransactions,
+        payCadence ?? "monthly",
       ),
     [
       transactions,
@@ -157,6 +161,7 @@ export default function ResumenView() {
       selectedMonth,
       monthReferenceToday,
       paydayWeekday,
+      payCadence,
       summaryCurrency,
       prefilteredMonthTransactions,
     ],
@@ -179,6 +184,7 @@ export default function ResumenView() {
           currency: summaryCurrency,
           referenceToday: monthReferenceToday,
           prefilteredMonthTransactions,
+          payCadence: payCadence ?? "monthly",
         },
       ),
     [
@@ -186,6 +192,7 @@ export default function ResumenView() {
       categories,
       selectedMonth,
       paydayWeekday,
+      payCadence,
       summaryCurrency,
       monthReferenceToday,
       prefilteredMonthTransactions,
@@ -202,6 +209,7 @@ export default function ResumenView() {
         paydayWeekday,
         summaryCurrency,
         prefilteredMonthTransactions,
+        payCadence ?? "monthly",
       ),
     [
       transactions,
@@ -209,6 +217,7 @@ export default function ResumenView() {
       budgets,
       selectedMonth,
       paydayWeekday,
+      payCadence,
       summaryCurrency,
       prefilteredMonthTransactions,
     ],
@@ -224,12 +233,14 @@ export default function ResumenView() {
         0.2,
         summaryCurrency,
         prefilteredMonthTransactions,
+        payCadence ?? "monthly",
       ),
     [
       transactions,
       categories,
       selectedMonth,
       paydayWeekday,
+      payCadence,
       summaryCurrency,
       prefilteredMonthTransactions,
     ],
@@ -253,6 +264,7 @@ export default function ResumenView() {
       referenceToday: monthReferenceToday,
       paydayWeekday,
       currency: otherCurrency,
+      payCadence: payCadence ?? "monthly",
     }).filter((tx) => !isTransferLeg(tx));
 
     if (otherMonthTx.length === 0) return null;
@@ -280,6 +292,7 @@ export default function ResumenView() {
     selectedMonth,
     monthReferenceToday,
     paydayWeekday,
+    payCadence,
   ]);
 
   const focusedWeek = useMemo(() => {
@@ -448,7 +461,10 @@ export default function ResumenView() {
         ) : null}
       </section>
 
-      <WeekBreakdown summary={summary} />
+      <WeekBreakdown
+        summary={summary}
+        isCollapsible={(payCadence ?? "monthly") === "monthly"}
+      />
 
       {installmentDebt.length > 0 ? (
         <section

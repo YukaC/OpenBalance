@@ -89,7 +89,10 @@ function mapProfile(row: ProfileRow): SyncProfile {
     name: row.name,
     email: row.email,
     defaultCurrency: row.defaultCurrency as UserProfile["defaultCurrency"],
+    payCadence: (row.payCadence as UserProfile["payCadence"]) || "monthly",
     paydayWeekday: row.paydayWeekday as UserProfile["paydayWeekday"],
+    paydayDayOfMonth:
+      typeof row.paydayDayOfMonth === "number" ? row.paydayDayOfMonth : 1,
     initials: row.initials,
     isSetupComplete: row.isSetupComplete,
     defaultAccountId: row.defaultAccountId ?? undefined,
@@ -211,7 +214,12 @@ async function upsertProfile(
     name: profile.name,
     email: profile.email,
     defaultCurrency: profile.defaultCurrency,
+    payCadence: profile.payCadence ?? "monthly",
     paydayWeekday: profile.paydayWeekday,
+    paydayDayOfMonth:
+      typeof profile.paydayDayOfMonth === "number"
+        ? profile.paydayDayOfMonth
+        : 1,
     initials: profile.initials,
     isSetupComplete: profile.isSetupComplete ?? false,
     defaultAccountId: profile.defaultAccountId ?? null,

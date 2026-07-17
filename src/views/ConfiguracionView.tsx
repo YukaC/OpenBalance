@@ -112,7 +112,9 @@ export default function ConfiguracionView() {
       <PaydaySection
         profile={controller.profile}
         notificationPermission={controller.notificationPermission}
+        onSetPayCadence={controller.setPayCadence}
         onSetPayday={controller.setPayday}
+        onSetPaydayDayOfMonth={controller.setPaydayDayOfMonth}
         onTogglePaydayReminder={controller.handleTogglePaydayReminder}
       />
 

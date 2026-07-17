@@ -12,7 +12,7 @@ import { parseMonthKey } from "@/lib/dates";
 import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { METHOD_LABELS } from "@/lib/format";
-import { filterByMonthPayWeeks } from "@/lib/summaries";
+import { getMonthTransactions } from "@/lib/month-index";
 import type { PaymentMethod, Transaction, TransactionType } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 import { useToastStore } from "@/store/toast-store";
@@ -79,6 +79,7 @@ export default function TransaccionesView() {
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
+  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const defaultCurrency = useFinanceStore((s) => s.profile.defaultCurrency);
   const accounts = useFinanceStore((s) => s.accounts);
   const openForm = useFinanceStore((s) => s.openForm);
@@ -185,14 +186,12 @@ export default function TransaccionesView() {
 
   const monthTransactions = useMemo(
     () =>
-      filterByMonthPayWeeks(
-        transactions,
-        selectedMonth,
-        undefined,
+      getMonthTransactions(transactions, selectedMonth, {
         paydayWeekday,
-        defaultCurrency,
-      ),
-    [transactions, selectedMonth, paydayWeekday, defaultCurrency],
+        currency: defaultCurrency,
+        payCadence: payCadence ?? "monthly",
+      }),
+    [transactions, selectedMonth, paydayWeekday, payCadence, defaultCurrency],
   );
 
   const filtered = useMemo(() => {

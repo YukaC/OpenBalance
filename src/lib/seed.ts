@@ -21,7 +21,10 @@ export const DEFAULT_PROFILE: UserProfile = {
   name: "Mariano J.",
   email: "mariano@example.com",
   defaultCurrency: "ARS",
+  /** Demo seed uses weekly pay-week data. */
+  payCadence: "weekly",
   paydayWeekday: "viernes",
+  paydayDayOfMonth: 1,
   initials: "MJ",
   /** Demo seed skips onboarding; "Restablecer datos demo" restores this. */
   isSetupComplete: true,

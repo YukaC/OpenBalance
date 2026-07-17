@@ -7,7 +7,8 @@ import {
   formatPercentDelta,
   type CurrencyCode,
 } from "@/lib/format";
-import { filterByMonthPayWeeks, sumByType } from "@/lib/summaries";
+import { getMonthTransactions } from "@/lib/month-index";
+import { sumByType } from "@/lib/summaries";
 import type { Transaction } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -76,6 +77,7 @@ export function MonthComparisonChart({
 }: MonthComparisonChartProps) {
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
+  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const prevKey = previousMonthKey(monthKey);
   const previousLabel = formatMonthName(prevKey);
   const currentLabel = formatMonthName(monthKey);
@@ -92,20 +94,17 @@ export function MonthComparisonChart({
   }, []);
 
   const { rows, hasComparableData } = useMemo(() => {
-    const currentTx = filterByMonthPayWeeks(
-      transactions,
-      monthKey,
-      undefined,
+    const cadence = payCadence ?? "monthly";
+    const currentTx = getMonthTransactions(transactions, monthKey, {
       paydayWeekday,
       currency,
-    );
-    const previousTx = filterByMonthPayWeeks(
-      transactions,
-      prevKey,
-      undefined,
+      payCadence: cadence,
+    });
+    const previousTx = getMonthTransactions(transactions, prevKey, {
       paydayWeekday,
       currency,
-    );
+      payCadence: cadence,
+    });
 
     const currentIncome = sumByType(currentTx, "ingreso", currency);
     const currentExpense = sumByType(currentTx, "gasto", currency);
@@ -140,7 +139,7 @@ export function MonthComparisonChart({
       previousExpense !== 0;
 
     return { rows: nextRows, hasComparableData: hasData };
-  }, [transactions, monthKey, prevKey, currency, paydayWeekday]);
+  }, [transactions, monthKey, prevKey, currency, paydayWeekday, payCadence]);
 
   if (!hasComparableData) return null;
 

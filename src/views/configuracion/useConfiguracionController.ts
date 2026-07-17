@@ -47,6 +47,8 @@ export function useConfiguracionController() {
   const accounts = useFinanceStore((s) => s.accounts);
   const updateProfile = useFinanceStore((s) => s.updateProfile);
   const setPayday = useFinanceStore((s) => s.setPayday);
+  const setPayCadence = useFinanceStore((s) => s.setPayCadence);
+  const setPaydayDayOfMonth = useFinanceStore((s) => s.setPaydayDayOfMonth);
   const resetToSeed = useFinanceStore((s) => s.resetToSeed);
   const addTransaction = useFinanceStore((s) => s.addTransaction);
   const exportBackup = useFinanceStore((s) => s.exportBackup);
@@ -128,11 +130,19 @@ export function useConfiguracionController() {
 
   useEffect(() => {
     if (!hydrated) return;
-    void syncNativePaydayNotification(
-      profile.paydayWeekday,
-      Boolean(profile.shouldRemindPaydayLoad),
-    );
-  }, [hydrated, profile.paydayWeekday, profile.shouldRemindPaydayLoad]);
+    void syncNativePaydayNotification({
+      payCadence: profile.payCadence ?? "monthly",
+      paydayWeekday: profile.paydayWeekday,
+      paydayDayOfMonth: profile.paydayDayOfMonth ?? 1,
+      shouldRemind: Boolean(profile.shouldRemindPaydayLoad),
+    });
+  }, [
+    hydrated,
+    profile.payCadence,
+    profile.paydayWeekday,
+    profile.paydayDayOfMonth,
+    profile.shouldRemindPaydayLoad,
+  ]);
 
   useEffect(() => {
     if (typeof Notification === "undefined") {
@@ -452,7 +462,12 @@ export function useConfiguracionController() {
       }
     }
     updateProfile({ shouldRemindPaydayLoad: nextEnabled });
-    await syncNativePaydayNotification(profile.paydayWeekday, nextEnabled);
+    await syncNativePaydayNotification({
+      payCadence: profile.payCadence ?? "monthly",
+      paydayWeekday: profile.paydayWeekday,
+      paydayDayOfMonth: profile.paydayDayOfMonth ?? 1,
+      shouldRemind: nextEnabled,
+    });
   }
 
   return {
@@ -495,6 +510,8 @@ export function useConfiguracionController() {
     backupInputRef,
     updateProfile,
     setPayday,
+    setPayCadence,
+    setPaydayDayOfMonth,
     handleSaveName,
     handleSaveEmail,
     handleExportCsv,

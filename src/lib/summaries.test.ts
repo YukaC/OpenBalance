@@ -407,6 +407,49 @@ describe("buildMonthSummary", () => {
     assert.equal(summary.byCategory.length, 1);
     assert.equal(summary.byCategory[0].amount, 40);
   });
+
+  it("monthly cadence totals follow calendar month, not pay-week spillover", () => {
+    // July 2026 payday sábado: first week spills into Jun 28 — but monthly ignores it.
+    const txs = [
+      makeTx({
+        id: "june-income",
+        type: "ingreso",
+        amount: 270_000,
+        month: "2026-06",
+        date: "2026-06-28",
+      }),
+      makeTx({
+        id: "july-income",
+        type: "ingreso",
+        amount: 100_000,
+        month: "2026-07",
+        date: "2026-07-11",
+      }),
+      makeTx({
+        id: "july-expense",
+        type: "gasto",
+        amount: 20_000,
+        month: "2026-07",
+        date: "2026-07-15",
+        categoryId: "cat-comida",
+      }),
+    ];
+    const summary = buildMonthSummary(
+      txs,
+      categories,
+      "2026-07",
+      new Date(2026, 6, 16),
+      "sabado",
+      "ARS",
+      undefined,
+      "monthly",
+    );
+
+    assert.equal(summary.income, 100_000);
+    assert.equal(summary.expense, 20_000);
+    assert.equal(summary.balance, 80_000);
+    assert.ok(summary.weeks.length > 0);
+  });
 });
 
 describe("sumByAccount / computeAccountBalance", () => {
