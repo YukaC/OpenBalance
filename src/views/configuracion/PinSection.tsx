@@ -1,5 +1,9 @@
 import { CollapsibleLedgerSection } from "@/components/CollapsibleLedgerSection";
 
+const PIN_ERROR_ID = "config-pin-error";
+
+type PinErrorField = "current" | "new" | "confirm" | null;
+
 type PinSectionProps = {
   pinEnabled: boolean;
   currentPin: string;
@@ -9,6 +13,7 @@ type PinSectionProps = {
   confirmPin: string;
   setConfirmPin: (value: string) => void;
   pinError: string;
+  pinErrorField: PinErrorField;
   pinMessage: string;
   isSavingPin: boolean;
   onSavePin: () => void;
@@ -29,6 +34,7 @@ export function PinSection({
   confirmPin,
   setConfirmPin,
   pinError,
+  pinErrorField,
   pinMessage,
   isSavingPin,
   onSavePin,
@@ -38,6 +44,9 @@ export function PinSection({
   isTogglingBiometric = false,
   onToggleBiometric,
 }: PinSectionProps) {
+  const hasError = Boolean(pinError);
+  const errorDescribedBy = hasError ? PIN_ERROR_ID : undefined;
+
   return (
     <CollapsibleLedgerSection
       headingId="pin-heading"
@@ -74,6 +83,10 @@ export function PinSection({
             onChange={(e) =>
               setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 6))
             }
+            aria-invalid={pinErrorField === "current" || undefined}
+            aria-describedby={
+              pinErrorField === "current" ? errorDescribedBy : undefined
+            }
             className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
           />
         </label>
@@ -94,6 +107,10 @@ export function PinSection({
           onChange={(e) =>
             setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))
           }
+          aria-invalid={pinErrorField === "new" || undefined}
+          aria-describedby={
+            pinErrorField === "new" ? errorDescribedBy : undefined
+          }
           className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
         />
       </label>
@@ -113,12 +130,16 @@ export function PinSection({
           onChange={(e) =>
             setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 6))
           }
+          aria-invalid={pinErrorField === "confirm" || undefined}
+          aria-describedby={
+            pinErrorField === "confirm" ? errorDescribedBy : undefined
+          }
           className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
         />
       </label>
 
       {pinError ? (
-        <p className="text-[13px] text-[var(--red)]" role="alert">
+        <p id={PIN_ERROR_ID} className="text-[13px] text-[var(--red)]" role="alert">
           {pinError}
         </p>
       ) : null}
