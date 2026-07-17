@@ -24,6 +24,7 @@ import {
 import { ensureLifecycle, isActive, touch } from "@/lib/entity-lifecycle";
 import { roundAmountForCurrency } from "@/lib/format";
 import { isPinEnabled } from "@/lib/pin-lock";
+import { projectRecurringIncomeToMonth } from "@/lib/recurring-income";
 import { markTransactionsRepairedThisSession } from "@/lib/repair-session";
 import {
   DEFAULT_ACCOUNTS,
@@ -166,6 +167,11 @@ interface FinanceState {
   removeCategory: (id: string) => void;
   addIncomeSource: (source: Omit<IncomeSource, "id">) => void;
   updateIncomeSource: (id: string, patch: Partial<IncomeSource>) => void;
+  /**
+   * Materialize virtual recurring-income projections for `monthKey` as real
+   * ledger rows (G6). Returns how many transactions were created.
+   */
+  materializeProjectedRecurringIncome: (monthKey: string) => number;
   updateProfile: (patch: Partial<UserProfile>) => void;
   setPayday: (weekday: Weekday) => void;
   setBudget: (categoryId: string, month: string, amountLimit: number) => void;
@@ -648,6 +654,31 @@ export const useFinanceStore = create<FinanceState>()(
             item.id === id ? touch({ ...item, ...patch }) : item,
           ),
         })),
+      materializeProjectedRecurringIncome: (monthKey) => {
+        const projected = projectRecurringIncomeToMonth(
+          get().transactions,
+          get().incomeSources,
+          monthKey,
+        );
+        if (projected.length === 0) return 0;
+
+        const materialized = projected.map((item) =>
+          touch({
+            ...item,
+            id: createId("tx"),
+            origin: "recurrente" as const,
+            deletedAt: null,
+          }),
+        );
+
+        set((state) => ({
+          transactions: dedupeTransactionsById([
+            ...materialized,
+            ...state.transactions,
+          ]),
+        }));
+        return materialized.length;
+      },
       updateProfile: (patch) =>
         set((state) => ({
           profile: touch({ ...state.profile, ...patch }),

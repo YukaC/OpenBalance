@@ -15,6 +15,7 @@ import { WeekBreakdown } from "@/components/WeekBreakdown";
 import { getAppToday } from "@/lib/dates";
 import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
+import { buildManualFxSnapshot } from "@/lib/manual-fx";
 import { getMonthTransactions } from "@/lib/month-index";
 import { useNavigateToSection } from "@/lib/section-nav";
 import {
@@ -57,16 +58,13 @@ const RecurringExpenseHint = dynamic(
   { loading: () => null },
 );
 
-function convertWithManualRate(
-  amount: number,
-  fromCurrency: "ARS" | "USD",
-  toCurrency: "ARS" | "USD",
-  arsPerUsd: number,
-): number {
-  if (fromCurrency === toCurrency) return amount;
-  if (toCurrency === "ARS") return amount * arsPerUsd;
-  return amount / arsPerUsd;
-}
+const RecurringIncomeProjectionHint = dynamic(
+  () =>
+    import("@/components/RecurringIncomeProjectionHint").then(
+      (m) => m.RecurringIncomeProjectionHint,
+    ),
+  { loading: () => null },
+);
 
 export default function ResumenView() {
   const navigateToSection = useNavigateToSection();
@@ -240,13 +238,7 @@ export default function ResumenView() {
     [transactions, monthReferenceToday],
   );
 
-  const fxEquivalent = useMemo(() => {
-    const rate =
-      manualExchangeRate != null && manualExchangeRate > 0
-        ? manualExchangeRate
-        : null;
-    if (!rate) return null;
-
+  const fxSnapshot = useMemo(() => {
     const otherCurrency: "ARS" | "USD" =
       defaultCurrency === "ARS" ? "USD" : "ARS";
     const otherMonthTx = getMonthTransactions(transactions, selectedMonth, {
@@ -255,24 +247,15 @@ export default function ResumenView() {
       currency: otherCurrency,
     }).filter((tx) => !isTransferLeg(tx));
 
-    if (otherMonthTx.length === 0) return null;
-
     const otherIncome = sumByType(otherMonthTx, "ingreso", otherCurrency);
     const otherExpense = sumByType(otherMonthTx, "gasto", otherCurrency);
-    const otherBalance = otherIncome - otherExpense;
-    if (otherIncome === 0 && otherExpense === 0) return null;
 
-    return {
-      otherCurrency,
-      otherBalance,
-      equivalentBalance: convertWithManualRate(
-        otherBalance,
-        otherCurrency,
-        defaultCurrency,
-        rate,
-      ),
-      rate,
-    };
+    return buildManualFxSnapshot({
+      defaultCurrency,
+      manualExchangeRate,
+      otherIncome,
+      otherExpense,
+    });
   }, [
     manualExchangeRate,
     defaultCurrency,
@@ -383,7 +366,7 @@ export default function ResumenView() {
           summary={summary}
           weeklyAverageIncome={weeklyAverageIncome}
         />
-        {fxEquivalent ? (
+        {fxSnapshot && fxSnapshot.rate != null && fxSnapshot.equivalentBalance != null ? (
           <div
             className="mt-3 rounded-[12px] border border-[var(--line)] bg-[var(--surface-raised)] px-3.5 py-3"
             aria-label="Equivalente en moneda por defecto"
@@ -392,23 +375,52 @@ export default function ResumenView() {
               Equivalente en {defaultCurrency}
             </p>
             <p className="mt-1 text-[13px] tabular-nums text-[var(--ink)]">
-              Balance {fxEquivalent.otherCurrency}:{" "}
+              Balance {fxSnapshot.otherCurrency}:{" "}
               <Money
-                amount={fxEquivalent.otherBalance}
-                currency={fxEquivalent.otherCurrency}
+                amount={fxSnapshot.otherBalance}
+                currency={fxSnapshot.otherCurrency}
                 withSign
               />
               {" → "}
               <Money
-                amount={fxEquivalent.equivalentBalance}
+                amount={fxSnapshot.equivalentBalance}
                 currency={defaultCurrency}
                 withSign
               />
             </p>
             <p className="mt-1.5 text-[11.5px] text-[var(--ink-faint)]">
-              Tasa manual: 1 USD = {fxEquivalent.rate.toLocaleString("es-AR")}{" "}
+              Tasa manual: 1 USD = {fxSnapshot.rate.toLocaleString("es-AR")}{" "}
               ARS. No es cotización oficial ni en tiempo real.
             </p>
+          </div>
+        ) : null}
+        {fxSnapshot && fxSnapshot.rate == null ? (
+          <div
+            className="mt-3 rounded-[12px] border border-[var(--line)] bg-[var(--surface-raised)] px-3.5 py-3"
+            aria-label="Tipo de cambio no configurado"
+          >
+            <p className="text-[12px] font-semibold text-[var(--ink-soft)]">
+              Movimientos en {fxSnapshot.otherCurrency} sin equivalente
+            </p>
+            <p className="mt-1 text-[13px] tabular-nums text-[var(--ink)]">
+              Balance {fxSnapshot.otherCurrency}:{" "}
+              <Money
+                amount={fxSnapshot.otherBalance}
+                currency={fxSnapshot.otherCurrency}
+                withSign
+              />
+            </p>
+            <p className="mt-1.5 text-[11.5px] text-[var(--ink-faint)]">
+              Configurá un tipo de cambio manual en Configuración para ver el
+              equivalente en {defaultCurrency}. No usamos cotizaciones externas.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigateToSection("/configuracion")}
+              className={`mt-2 rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold text-[var(--ink-soft)] transition-soft hover:bg-[var(--paper-deep)] hover:text-[var(--ink)] ${FOCUS_RING}`}
+            >
+              Ir a Configuración
+            </button>
           </div>
         ) : null}
         {savingsGoal != null ? (
@@ -613,6 +625,7 @@ export default function ResumenView() {
       ) : null}
 
       <RecurringExpenseHint />
+      <RecurringIncomeProjectionHint />
 
       <section aria-label="Más del mes" className="space-y-5">
         <MonthComparisonChart

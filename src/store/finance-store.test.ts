@@ -315,4 +315,63 @@ describe("finance-store restoreBackup", () => {
     assert.equal(state.transactions[0].title, "From backup");
     assert.ok(typeof state.transactions[0].updatedAt === "string");
   });
+
+  it("materializes projected recurring income for a month", () => {
+    useFinanceStore.setState({
+      incomeSources: [
+        {
+          id: "src-sueldo",
+          name: "Sueldo",
+          type: "mensual",
+          isRecurring: true,
+          updatedAt: new Date(0).toISOString(),
+          deletedAt: null,
+        },
+      ],
+      transactions: [
+        {
+          id: "tx-jan-sueldo",
+          type: "ingreso",
+          amount: 500_000,
+          currency: "ARS",
+          date: "2026-01-30",
+          method: "transferencia",
+          categoryId: null,
+          incomeSourceId: "src-sueldo",
+          accountId: "acc-principal",
+          note: "",
+          title: "Sueldo",
+          weekIso: "2026-W05",
+          month: "2026-01",
+          origin: "manual",
+          isAutoCategorized: false,
+          isFixed: false,
+          updatedAt: new Date(0).toISOString(),
+          deletedAt: null,
+        },
+      ],
+      selectedMonth: "2026-02",
+    });
+
+    const count =
+      useFinanceStore.getState().materializeProjectedRecurringIncome("2026-02");
+    assert.equal(count, 1);
+
+    const febIncomes = useFinanceStore
+      .getState()
+      .transactions.filter(
+        (tx) =>
+          tx.month === "2026-02" &&
+          tx.type === "ingreso" &&
+          tx.incomeSourceId === "src-sueldo",
+      );
+    assert.equal(febIncomes.length, 1);
+    assert.equal(febIncomes[0].amount, 500_000);
+    assert.equal(febIncomes[0].origin, "recurrente");
+    assert.ok(!febIncomes[0].id.startsWith("projected-income:"));
+
+    const secondPass =
+      useFinanceStore.getState().materializeProjectedRecurringIncome("2026-02");
+    assert.equal(secondPass, 0);
+  });
 });
