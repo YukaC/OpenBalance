@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { CollapsibleLedgerSection } from "@/components/CollapsibleLedgerSection";
 import { isAuthEnabled } from "@/lib/auth-flags";
-import { pushPullSync } from "@/lib/sync-client";
+import { hasPendingLocalChanges, pushPullSync } from "@/lib/sync-client";
+import {
+  SYNC_UI_LABELS,
+  deriveSyncUiStatus,
+  getIsSyncing,
+  getLastSyncError,
+  subscribeSyncStatus,
+} from "@/lib/sync-status";
 import { useFinanceStore } from "@/store/finance-store";
 
 function formatSyncedAt(iso: string | null): string {
@@ -18,24 +25,83 @@ function formatSyncedAt(iso: string | null): string {
   }
 }
 
+function subscribeOnline(listener: () => void): () => void {
+  window.addEventListener("online", listener);
+  window.addEventListener("offline", listener);
+  return () => {
+    window.removeEventListener("online", listener);
+    window.removeEventListener("offline", listener);
+  };
+}
+
+function getIsOnlineSnapshot(): boolean {
+  return typeof navigator === "undefined" ? true : navigator.onLine;
+}
+
+function getIsOnlineServerSnapshot(): boolean {
+  return true;
+}
+
 export function SyncSection() {
   const { data: session, status } = useSession();
   const hydrated = useFinanceStore((s) => s.hydrated);
   const lastSyncedAt = useFinanceStore((s) => s.lastSyncedAt);
+  const transactions = useFinanceStore((s) => s.transactions);
+  const categories = useFinanceStore((s) => s.categories);
+  const budgets = useFinanceStore((s) => s.budgets);
+  const incomeSources = useFinanceStore((s) => s.incomeSources);
+  const userRules = useFinanceStore((s) => s.userRules);
+  const accounts = useFinanceStore((s) => s.accounts);
+  const profile = useFinanceStore((s) => s.profile);
 
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(getIsSyncing);
+  const [lastError, setLastError] = useState(getLastSyncError);
+  const [hasPending, setHasPending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [hasError, setHasError] = useState(false);
+
+  const isOnline = useSyncExternalStore(
+    subscribeOnline,
+    getIsOnlineSnapshot,
+    getIsOnlineServerSnapshot,
+  );
 
   const authEnabled = isAuthEnabled();
   const isAuthenticated = status === "authenticated" && Boolean(session?.user);
 
+  useEffect(() => {
+    return subscribeSyncStatus(() => {
+      setIsSyncing(getIsSyncing());
+      setLastError(getLastSyncError());
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setHasPending(hasPendingLocalChanges());
+  }, [
+    hydrated,
+    lastSyncedAt,
+    transactions,
+    categories,
+    budgets,
+    incomeSources,
+    userRules,
+    accounts,
+    profile,
+  ]);
+
+  const syncUiStatus = deriveSyncUiStatus({
+    isOnline,
+    isSyncing,
+    lastError,
+    hasPending,
+  });
+
   async function handleSyncNow() {
-    setIsSyncing(true);
     setStatusMessage(null);
     setHasError(false);
     const result = await pushPullSync();
-    setIsSyncing(false);
     if (result.ok) {
       setStatusMessage("Sincronización completa.");
       return;
@@ -72,6 +138,17 @@ export function SyncSection() {
       }
       defaultOpen={authEnabled}
     >
+      <p className="text-[13px] text-[var(--ink-soft)]">
+        Estado:{" "}
+        <span className="font-semibold text-[var(--ink)]">
+          {authEnabled && isAuthenticated
+            ? SYNC_UI_LABELS[syncUiStatus]
+            : authEnabled
+              ? "Sin sesión"
+              : "Solo local"}
+        </span>
+      </p>
+
       <p className="text-[13px] text-[var(--ink-soft)]">
         Última sync:{" "}
         <span className="font-semibold text-[var(--ink)]">

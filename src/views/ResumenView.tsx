@@ -6,6 +6,7 @@ import { BudgetAlertBanner } from "@/components/BudgetAlertBanner";
 import { CategorySpendAlert } from "@/components/CategorySpendAlert";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HormigaDrainNote } from "@/components/HormigaDrainNote";
+import { Money } from "@/components/Money";
 import { MonthBalance } from "@/components/MonthBalance";
 import { MonthNavigator } from "@/components/MonthNavigator";
 import { TransactionRow } from "@/components/TransactionRow";
@@ -17,10 +18,15 @@ import { useNavigateToSection } from "@/lib/section-nav";
 import {
   filterByPayWeek,
   buildMonthSummary,
+  computeInstallmentDebt,
   findBudgetAlerts,
   findCategorySpendAlerts,
   getHormigaDrainAlert,
 } from "@/lib/summaries";
+import {
+  hasRepairedTransactionsThisSession,
+  markTransactionsRepairedThisSession,
+} from "@/lib/repair-session";
 import type { Transaction } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 import { useToastStore } from "@/store/toast-store";
@@ -64,6 +70,9 @@ export default function ResumenView() {
   const setViewMode = useFinanceStore((s) => s.setViewMode);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
   const defaultCurrency = useFinanceStore((s) => s.profile.defaultCurrency);
+  const monthlySavingsGoal = useFinanceStore(
+    (s) => s.profile.monthlySavingsGoal,
+  );
   const showToast = useToastStore((s) => s.showToast);
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
 
@@ -72,8 +81,9 @@ export default function ResumenView() {
   }, [setViewMode]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || hasRepairedTransactionsThisSession) return;
     repairTransactions();
+    markTransactionsRepairedThisSession();
   }, [hydrated, repairTransactions]);
 
   const summary = useMemo(
@@ -140,6 +150,11 @@ export default function ResumenView() {
     [transactions, categories, selectedMonth, paydayWeekday, defaultCurrency],
   );
 
+  const installmentDebt = useMemo(
+    () => computeInstallmentDebt(transactions, getAppToday()),
+    [transactions],
+  );
+
   const focusedWeek = useMemo(() => {
     if (summary.weeks.length === 0) return null;
     if (selectedWeekIso) {
@@ -186,6 +201,15 @@ export default function ResumenView() {
     categorySpendAlerts.length > 0 ||
     hormigaDrain !== null;
 
+  const savingsGoal =
+    monthlySavingsGoal != null && monthlySavingsGoal > 0
+      ? monthlySavingsGoal
+      : null;
+  const savingsProgressRatio =
+    savingsGoal != null
+      ? Math.max(0, Math.min(1, summary.balance / savingsGoal))
+      : 0;
+
   if (!hydrated) {
     return <ViewSkeleton />;
   }
@@ -203,9 +227,81 @@ export default function ResumenView() {
           summary={summary}
           weeklyAverageIncome={weeklyAverageIncome}
         />
+        {savingsGoal != null ? (
+          <div
+            className="mt-3 rounded-[12px] border border-[var(--line)] bg-[var(--surface-raised)] px-3.5 py-3"
+            aria-label="Meta de ahorro mensual"
+          >
+            <div className="mb-1.5 flex items-baseline justify-between gap-2">
+              <p className="text-[12px] font-semibold text-[var(--ink-soft)]">
+                Meta de ahorro
+              </p>
+              <p className="text-[12.5px] font-semibold tabular-nums text-[var(--ink)]">
+                <Money amount={summary.balance} currency={defaultCurrency} />
+                {" / "}
+                <Money amount={savingsGoal} currency={defaultCurrency} />
+              </p>
+            </div>
+            <div
+              className="h-2 overflow-hidden rounded-full bg-[var(--bg)]"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(savingsProgressRatio * 100)}
+              aria-label="Progreso de meta de ahorro"
+            >
+              <div
+                className="h-full rounded-full bg-[var(--green)] transition-[width] duration-300"
+                style={{ width: `${savingsProgressRatio * 100}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-[11.5px] text-[var(--ink-faint)]">
+              {summary.balance >= savingsGoal
+                ? "Meta alcanzada este mes"
+                : `${Math.round(savingsProgressRatio * 100)}% del balance del mes`}
+            </p>
+          </div>
+        ) : null}
       </section>
 
       <WeekBreakdown summary={summary} />
+
+      {installmentDebt.length > 0 ? (
+        <section
+          className="ledger-panel p-4 min-[880px]:p-5"
+          aria-labelledby="installment-debt-heading"
+        >
+          <div className="section-intro mb-3">
+            <h2 id="installment-debt-heading" className="section-heading">
+              Cuotas pendientes
+            </h2>
+            <p className="section-lede">Lo que queda por pagar en cuotas</p>
+          </div>
+          <ul className="space-y-2">
+            {installmentDebt.map((group) => (
+              <li
+                key={group.installmentGroupId}
+                className="flex items-baseline justify-between gap-3 border-b border-[var(--line)] py-2 last:border-b-0"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-semibold text-[var(--ink)]">
+                    {group.title}
+                  </p>
+                  <p className="text-[12px] text-[var(--ink-soft)]">
+                    {group.remainingCount} de {group.installmentCount} cuotas
+                  </p>
+                </div>
+                <Money
+                  amount={group.remainingAmount}
+                  tone="expense"
+                  currency={group.currency}
+                  className="shrink-0 text-[14px] font-semibold"
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section
         className="ledger-panel flex flex-col p-4 min-[880px]:p-5"

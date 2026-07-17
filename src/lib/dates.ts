@@ -29,6 +29,7 @@ export function toMonthKey(date: Date | string): string {
   return format(value, "yyyy-MM");
 }
 
+/** ISO week key `YYYY-Www` (ISO week-year + week number) for a calendar date. */
 export function toWeekIso(date: Date | string): string {
   const value = typeof date === "string" ? parseISO(date) : date;
   const year = getISOWeekYear(value);
@@ -113,10 +114,13 @@ export function formatCurrentWeekLabel(
   )}`;
 }
 
+/** One pay week in a month: 7 days ending on payday (may start in the prior calendar month). */
 export interface MonthWeekSlice {
+  /** 1-based index among pay weeks whose payday falls in the month. */
   index: number;
   start: Date;
   end: Date;
+  /** ISO week of `start` (`toWeekIso`); used as a stable UI/selection key. */
   weekIso: string;
   label: string;
   rangeLabel: string;

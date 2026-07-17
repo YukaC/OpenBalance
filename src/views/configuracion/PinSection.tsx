@@ -40,7 +40,7 @@ export function PinSection({
             remota).
           </p>
           <p className="mt-1 text-[12.5px] text-[var(--ink-faint)]">
-            Protege la apertura de la app; no cifra el almacenamiento.
+            Cifra el almacenamiento local; el PIN nunca se envía al servidor.
           </p>
         </>
       }

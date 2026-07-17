@@ -1,7 +1,8 @@
 import { CollapsibleLedgerSection } from "@/components/CollapsibleLedgerSection";
-import { CURRENCY_OPTIONS } from "@/lib/format";
+import { CURRENCY_OPTIONS, parseMoneyInput } from "@/lib/format";
 import type { CurrencyCode } from "@/lib/format";
 import type { UserProfile } from "@/lib/types";
+import { useState } from "react";
 
 type ProfileSectionProps = {
   profile: UserProfile;
@@ -12,6 +13,7 @@ type ProfileSectionProps = {
   onSaveName: () => void;
   onSaveEmail: () => void;
   onCurrencyChange: (currency: CurrencyCode) => void;
+  onSavingsGoalChange: (goal: number | null) => void;
 };
 
 export function ProfileSection({
@@ -23,8 +25,39 @@ export function ProfileSection({
   onSaveName,
   onSaveEmail,
   onCurrencyChange,
+  onSavingsGoalChange,
 }: ProfileSectionProps) {
   const isSetupComplete = profile.isSetupComplete === true;
+  const [savingsGoalInput, setSavingsGoalInput] = useState(
+    profile.monthlySavingsGoal != null && profile.monthlySavingsGoal > 0
+      ? String(profile.monthlySavingsGoal)
+      : "",
+  );
+
+  function handleSaveSavingsGoal() {
+    const trimmed = savingsGoalInput.trim();
+    if (!trimmed) {
+      setSavingsGoalInput("");
+      if (profile.monthlySavingsGoal != null) {
+        onSavingsGoalChange(null);
+      }
+      return;
+    }
+    const parsed = parseMoneyInput(trimmed);
+    if (!(parsed > 0)) {
+      setSavingsGoalInput(
+        profile.monthlySavingsGoal != null && profile.monthlySavingsGoal > 0
+          ? String(profile.monthlySavingsGoal)
+          : "",
+      );
+      return;
+    }
+    const rounded = Math.round(parsed);
+    setSavingsGoalInput(String(rounded));
+    if (profile.monthlySavingsGoal !== rounded) {
+      onSavingsGoalChange(rounded);
+    }
+  }
 
   return (
     <CollapsibleLedgerSection
@@ -116,6 +149,29 @@ export function ProfileSection({
           }
         </p>
       </div>
+
+      <label htmlFor="profile-savings-goal" className="flex flex-col gap-1.5">
+        <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+          Meta de ahorro mensual
+        </span>
+        <input
+          id="profile-savings-goal"
+          name="monthlySavingsGoal"
+          inputMode="decimal"
+          autoComplete="off"
+          value={savingsGoalInput}
+          onChange={(e) => setSavingsGoalInput(e.target.value)}
+          onBlur={handleSaveSavingsGoal}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          placeholder="Opcional"
+          className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
+        />
+        <span className="text-[11.5px] text-[var(--ink-faint)]">
+          Se muestra el progreso en Resumen (balance del mes vs meta).
+        </span>
+      </label>
     </CollapsibleLedgerSection>
   );
 }

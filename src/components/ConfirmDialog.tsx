@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { FOCUS_RING } from "@/lib/focus-ring";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -13,9 +14,6 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
 }
-
-const FOCUSABLE_SELECTOR =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 export function ConfirmDialog({
   isOpen,
@@ -29,55 +27,13 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    previousActiveElementRef.current =
-      document.activeElement as HTMLElement | null;
-    cancelButtonRef.current?.focus();
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-        return;
-      }
-
-      if (event.key !== "Tab") return;
-
-      const panel = panelRef.current;
-      if (!panel) return;
-
-      const nodes = panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-      const list = [...nodes].filter((node) => !node.hasAttribute("disabled"));
-      if (list.length === 0) return;
-
-      const first = list[0];
-      const last = list[list.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      const previousElement = previousActiveElementRef.current;
-      if (
-        previousElement &&
-        typeof previousElement.focus === "function" &&
-        document.contains(previousElement)
-      ) {
-        previousElement.focus();
-      }
-    };
-  }, [isOpen, onCancel]);
+  useFocusTrap({
+    containerRef: panelRef,
+    isActive: isOpen,
+    initialFocusRef: cancelButtonRef,
+    onEscape: onCancel,
+  });
 
   if (!isOpen) return null;
 

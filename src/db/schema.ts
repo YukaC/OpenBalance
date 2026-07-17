@@ -24,6 +24,25 @@ export const users = pgTable(
   (table) => [uniqueIndex("users_email_unique").on(table.email)],
 );
 
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" })
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("password_reset_tokens_token_hash_unique").on(table.tokenHash),
+  ],
+);
+
 export const profiles = pgTable("profiles", {
   userId: text("user_id")
     .primaryKey()
@@ -40,6 +59,7 @@ export const profiles = pgTable("profiles", {
   shouldRemindPaydayLoad: boolean("should_remind_payday_load")
     .notNull()
     .default(false),
+  monthlySavingsGoal: doublePrecision("monthly_savings_goal"),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
     .notNull()
     .defaultNow(),
@@ -162,6 +182,7 @@ export const transactions = pgTable(
     installmentGroupId: text("installment_group_id"),
     installmentIndex: integer("installment_index"),
     installmentCount: integer("installment_count"),
+    transferGroupId: text("transfer_group_id"),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
@@ -171,6 +192,7 @@ export const transactions = pgTable(
 );
 
 export type UserRow = typeof users.$inferSelect;
+export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 export type ProfileRow = typeof profiles.$inferSelect;
 export type AccountRow = typeof accounts.$inferSelect;
 export type CategoryRow = typeof categories.$inferSelect;

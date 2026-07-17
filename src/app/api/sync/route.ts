@@ -2,12 +2,20 @@ import { NextResponse } from "next/server";
 import { getDb, isDatabaseConfigured } from "@/db";
 import { auth } from "@/lib/auth";
 import {
+  consumeRateLimit,
+  getClientIp,
+  RATE_LIMIT_WINDOW_MS,
+  SYNC_RATE_LIMIT,
+} from "@/lib/rate-limit";
+import {
   runSync,
   type SyncChanges,
   type SyncRequestBody,
 } from "@/lib/sync-server";
 
 export const runtime = "nodejs";
+
+const MAX_SYNC_BODY_BYTES = 2_000_000;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -68,6 +76,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > MAX_SYNC_BODY_BYTES
+    ) {
+      return NextResponse.json(
+        { error: "Payload too large", code: "PAYLOAD_TOO_LARGE" },
+        { status: 413 },
+      );
+    }
+  }
+
+  const ip = getClientIp(request);
+  const rateLimit = consumeRateLimit(
+    `sync:${ip}:${userId}`,
+    SYNC_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_MS,
+  );
+  if (!rateLimit.isAllowed) {
+    return NextResponse.json(
+      {
+        error: "Too many requests",
+        code: "RATE_LIMITED",
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+      },
+    );
+  }
+
   let raw: unknown;
   try {
     raw = await request.json();
@@ -85,7 +127,16 @@ export async function POST(request: Request) {
     const result = await runSync(db, userId, body);
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[sync]", error);
+    const message = error instanceof Error ? error.message : "unknown";
+    const code =
+      error instanceof Error && "code" in error && typeof error.code === "string"
+        ? error.code
+        : undefined;
+    console.error(
+      "[sync]",
+      code ? `${message} (${code})` : message,
+      `userId=${userId}`,
+    );
     return NextResponse.json(
       { error: "Sync failed", code: "SYNC_FAILED" },
       { status: 500 },

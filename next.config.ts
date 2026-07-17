@@ -13,9 +13,20 @@ function buildConnectSrc(): string {
   return `connect-src ${Array.from(sources).join(" ")}`;
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
+// Next.js still needs 'unsafe-inline' for script/style without a nonce/hash
+// middleware pipeline (H9). Removing it here would break the App Router.
+// 'unsafe-eval' is kept in development for HMR/devtools; omitted in production.
+const scriptSrc = isProduction
+  ? "script-src 'self' 'unsafe-inline'"
+  : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  scriptSrc,
+  // Allow same-origin Service Worker (/sw.js) and dedicated/shared workers.
+  "worker-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",

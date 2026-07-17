@@ -3,6 +3,7 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ViewSkeleton } from "@/components/ViewSkeleton";
 import type { CurrencyCode } from "@/lib/format";
+import { AccountSecuritySection } from "@/views/configuracion/AccountSecuritySection";
 import { AccountsSection } from "@/views/configuracion/AccountsSection";
 import { DataSection } from "@/views/configuracion/DataSection";
 import { DownloadAppSection } from "@/views/configuracion/DownloadAppSection";
@@ -75,11 +76,15 @@ export default function ConfiguracionView() {
         onCurrencyChange={(currency: CurrencyCode) =>
           controller.updateProfile({ defaultCurrency: currency })
         }
+        onSavingsGoalChange={(goal) =>
+          controller.updateProfile({ monthlySavingsGoal: goal })
+        }
       />
 
       <AccountsSection
         profile={controller.profile}
         accounts={controller.accounts}
+        transactions={controller.transactions}
         newAccountName={controller.newAccountName}
         setNewAccountName={controller.setNewAccountName}
         newAccountCurrency={controller.newAccountCurrency}
@@ -89,6 +94,15 @@ export default function ConfiguracionView() {
         onSetDefaultAccount={(accountId) =>
           controller.updateProfile({ defaultAccountId: accountId })
         }
+        transferFromAccountId={controller.transferFromAccountId}
+        setTransferFromAccountId={controller.setTransferFromAccountId}
+        transferToAccountId={controller.transferToAccountId}
+        setTransferToAccountId={controller.setTransferToAccountId}
+        transferAmount={controller.transferAmount}
+        setTransferAmount={controller.setTransferAmount}
+        transferDate={controller.transferDate}
+        setTransferDate={controller.setTransferDate}
+        onAddTransfer={controller.handleAddTransfer}
       />
 
       <PaydaySection
@@ -114,6 +128,8 @@ export default function ConfiguracionView() {
       />
 
       <SyncSection />
+
+      <AccountSecuritySection />
 
       <DataSection
         csvInputRef={controller.csvInputRef}

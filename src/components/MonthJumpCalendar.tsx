@@ -59,6 +59,10 @@ function buildCalendarDays(viewMonth: Date): Date[] {
   return eachDayOfInterval({ start: gridStart, end: gridEnd });
 }
 
+function toDayKey(day: Date): string {
+  return format(day, "yyyy-MM-dd");
+}
+
 export function MonthJumpCalendar({
   isOpen,
   selectedMonth,
@@ -69,11 +73,13 @@ export function MonthJumpCalendar({
 }: MonthJumpCalendarProps) {
   const dialogId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const dayButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [viewMonth, setViewMonth] = useState(() => parseMonthKey(selectedMonth));
   const [viewMode, setViewMode] = useState<"days" | "years">("days");
   const [decadeStart, setDecadeStart] = useState(
     () => Math.floor(parseMonthKey(selectedMonth).getFullYear() / 12) * 12,
   );
+  const [focusedDayKey, setFocusedDayKey] = useState<string | null>(null);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -82,13 +88,38 @@ export function MonthJumpCalendar({
 
   useEffect(() => {
     if (!isOpen) return;
-    setViewMonth(parseMonthKey(selectedMonth));
+    const nextViewMonth = parseMonthKey(selectedMonth);
+    setViewMonth(nextViewMonth);
     setViewMode("days");
-    setDecadeStart(
-      Math.floor(parseMonthKey(selectedMonth).getFullYear() / 12) * 12,
-    );
-    panelRef.current?.focus();
+    setDecadeStart(Math.floor(nextViewMonth.getFullYear() / 12) * 12);
   }, [isOpen, selectedMonth]);
+
+  useEffect(() => {
+    if (!isOpen || viewMode !== "days") return;
+
+    const daysInMonth = buildCalendarDays(viewMonth).filter((day) =>
+      isSameMonth(day, viewMonth),
+    );
+    const isFocusInMonth = Boolean(
+      focusedDayKey &&
+        daysInMonth.some((day) => toDayKey(day) === focusedDayKey),
+    );
+    if (isFocusInMonth) return;
+
+    const todayInView = daysInMonth.find((day) =>
+      isSameDay(day, referenceToday),
+    );
+    const initialDay = todayInView ?? daysInMonth[0] ?? null;
+    setFocusedDayKey(initialDay ? toDayKey(initialDay) : null);
+  }, [isOpen, viewMode, viewMonth, referenceToday, focusedDayKey]);
+
+  useEffect(() => {
+    if (!isOpen || viewMode !== "days" || !focusedDayKey) return;
+    const frameId = window.requestAnimationFrame(() => {
+      dayButtonRefs.current[focusedDayKey]?.focus();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isOpen, viewMode, focusedDayKey, viewMonth]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -115,6 +146,9 @@ export function MonthJumpCalendar({
   if (!isOpen) return null;
 
   const calendarDays = buildCalendarDays(viewMonth);
+  const enabledDays = calendarDays.filter((day) =>
+    isSameMonth(day, viewMonth),
+  );
   const monthTitle = capitalizeLabel(
     format(viewMonth, "MMMM yyyy", { locale: es }),
   );
@@ -135,6 +169,56 @@ export function MonthJumpCalendar({
   function handleSelectYear(year: number) {
     setViewMonth(new Date(year, viewMonth.getMonth(), 1));
     setViewMode("days");
+  }
+
+  function moveDayFocus(currentDay: Date, delta: number) {
+    const currentIndex = enabledDays.findIndex((day) =>
+      isSameDay(day, currentDay),
+    );
+    if (currentIndex < 0) return;
+    const nextIndex = Math.max(
+      0,
+      Math.min(enabledDays.length - 1, currentIndex + delta),
+    );
+    const nextDay = enabledDays[nextIndex];
+    if (!nextDay) return;
+    setFocusedDayKey(toDayKey(nextDay));
+  }
+
+  function handleDayKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    day: Date,
+  ) {
+    switch (event.key) {
+      case "ArrowRight":
+        event.preventDefault();
+        moveDayFocus(day, 1);
+        break;
+      case "ArrowLeft":
+        event.preventDefault();
+        moveDayFocus(day, -1);
+        break;
+      case "ArrowDown":
+        event.preventDefault();
+        moveDayFocus(day, 7);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        moveDayFocus(day, -7);
+        break;
+      case "Home":
+        event.preventDefault();
+        if (enabledDays[0]) setFocusedDayKey(toDayKey(enabledDays[0]));
+        break;
+      case "End":
+        event.preventDefault();
+        if (enabledDays[enabledDays.length - 1]) {
+          setFocusedDayKey(toDayKey(enabledDays[enabledDays.length - 1]));
+        }
+        break;
+      default:
+        break;
+    }
   }
 
   const yearOptions = Array.from({ length: 12 }, (_, index) => decadeStart + index);
@@ -239,13 +323,29 @@ export function MonthJumpCalendar({
             {calendarDays.map((day) => {
               const isInViewMonth = isSameMonth(day, viewMonth);
               const isToday = isSameDay(day, referenceToday);
+              const dayKey = toDayKey(day);
+              const isFocusedDay = focusedDayKey === dayKey;
 
               return (
                 <button
-                  key={format(day, "yyyy-MM-dd")}
+                  key={dayKey}
+                  ref={(element) => {
+                    dayButtonRefs.current[dayKey] = element;
+                  }}
                   type="button"
+                  role="gridcell"
                   disabled={!isInViewMonth}
+                  tabIndex={
+                    !isInViewMonth ? -1 : isFocusedDay ? 0 : -1
+                  }
                   onClick={() => handleSelectDay(day)}
+                  onFocus={() => {
+                    if (isInViewMonth) setFocusedDayKey(dayKey);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!isInViewMonth) return;
+                    handleDayKeyDown(event, day);
+                  }}
                   aria-current={isToday ? "date" : undefined}
                   aria-label={capitalizeLabel(
                     format(day, "d MMMM yyyy", { locale: es }),

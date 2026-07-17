@@ -71,12 +71,13 @@ La ruta `/semanas` redirige a `/` (unificada en el resumen).
 
 Cada transacción guarda fecha real y campos derivados (`weekIso`, `month`). Los totales del mes usan **semanas de pago** (día de cobro configurable), no solo el mes calendario.
 
-Onboarding local en la primera visita. PIN opcional (hash local). Con auth activado: registro/login antes de usar sync.
+Onboarding local en la primera visita. PIN opcional: deriva una clave local (PBKDF2 + AES-GCM) y cifra el blob en IndexedDB; el PIN nunca viaja al servidor. Sin PIN = almacenamiento en claro. Con auth activado: registro/login antes de usar sync.
 
 ## Documentación
 
 - [docs/DEPLOY.md](./docs/DEPLOY.md) — Neon, Auth.js, Vercel, env vars
 - [docs/MOBILE.md](./docs/MOBILE.md) — Capacitor / static export
+- [docs/IMPLEMENTATION-PLAN.md](./docs/IMPLEMENTATION-PLAN.md) — roadmap post auth/sync
 - [AuditLogic.md](./AuditLogic.md) — auditoría de lógica de cálculo
 - [implementacion.md](./implementacion.md) — plan original
 - [analisis.md](./analisis.md) — análisis de producto

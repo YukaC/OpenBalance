@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { useToastStore } from "@/store/toast-store";
 
@@ -11,17 +11,44 @@ export function AppToast() {
   const durationMs = useToastStore((s) => s.durationMs);
   const hideToast = useToastStore((s) => s.hideToast);
 
+  const [isPaused, setIsPaused] = useState(false);
+  const remainingMsRef = useRef(durationMs);
+  const startedAtRef = useRef(0);
+
   useEffect(() => {
     if (!message) return;
-    const timerId = window.setTimeout(() => hideToast(), durationMs);
-    return () => window.clearTimeout(timerId);
-  }, [message, durationMs, hideToast]);
+    remainingMsRef.current = durationMs;
+    setIsPaused(false);
+  }, [message, durationMs]);
+
+  useEffect(() => {
+    if (!message || isPaused) return;
+
+    startedAtRef.current = Date.now();
+    const timerId = window.setTimeout(() => {
+      hideToast();
+    }, remainingMsRef.current);
+
+    return () => {
+      window.clearTimeout(timerId);
+      const elapsed = Date.now() - startedAtRef.current;
+      remainingMsRef.current = Math.max(0, remainingMsRef.current - elapsed);
+    };
+  }, [message, durationMs, hideToast, isPaused]);
 
   if (!message) return null;
 
   function handleAction() {
     onAction?.();
     hideToast();
+  }
+
+  function handlePause() {
+    setIsPaused(true);
+  }
+
+  function handleResume() {
+    setIsPaused(false);
   }
 
   return (
@@ -31,7 +58,17 @@ export function AppToast() {
       aria-live="polite"
       aria-atomic="true"
     >
-      <div className="pointer-events-auto flex max-w-md items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--card)] px-4 py-3 shadow-[var(--shadow-card)]">
+      <div
+        className="pointer-events-auto flex max-w-md items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--card)] px-4 py-3 shadow-[var(--shadow-card)]"
+        onMouseEnter={handlePause}
+        onMouseLeave={handleResume}
+        onFocusCapture={handlePause}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            handleResume();
+          }
+        }}
+      >
         <p className="min-w-0 flex-1 text-[13.5px] font-medium text-[var(--ink)]">
           {message}
         </p>
@@ -44,6 +81,14 @@ export function AppToast() {
             {actionLabel}
           </button>
         ) : null}
+        <button
+          type="button"
+          onClick={hideToast}
+          aria-label="Cerrar"
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[16px] leading-none text-[var(--ink-faint)] transition-soft hover:bg-[var(--paper-deep)] hover:text-[var(--ink)] ${FOCUS_RING}`}
+        >
+          ×
+        </button>
       </div>
     </div>
   );

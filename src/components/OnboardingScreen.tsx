@@ -13,6 +13,9 @@ import type { Weekday } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ONBOARDING_ERROR_ID = "onboarding-error";
+
+type OnboardingErrorField = "name" | "email";
 
 export function OnboardingScreen() {
   const profile = useFinanceStore((s) => s.profile);
@@ -24,6 +27,9 @@ export function OnboardingScreen() {
   const [paydayWeekday, setPaydayWeekday] = useState<Weekday>(profile.paydayWeekday);
   const [currency, setCurrency] = useState<CurrencyCode>(profile.defaultCurrency);
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorField, setErrorField] = useState<OnboardingErrorField | null>(
+    null,
+  );
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -31,13 +37,16 @@ export function OnboardingScreen() {
     const trimmedEmail = email.trim();
     if (!trimmedName) {
       setErrorMessage("Ingresá tu nombre para continuar.");
+      setErrorField("name");
       return;
     }
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
       setErrorMessage("Ingresá un email válido.");
+      setErrorField("email");
       return;
     }
     setErrorMessage("");
+    setErrorField(null);
     updateProfile({
       name: trimmedName,
       email: trimmedEmail,
@@ -84,6 +93,10 @@ export function OnboardingScreen() {
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
+            aria-invalid={errorField === "name" || undefined}
+            aria-describedby={
+              errorField === "name" ? ONBOARDING_ERROR_ID : undefined
+            }
             className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
             placeholder="Tu nombre"
           />
@@ -101,6 +114,10 @@ export function OnboardingScreen() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={errorField === "email" || undefined}
+            aria-describedby={
+              errorField === "email" ? ONBOARDING_ERROR_ID : undefined
+            }
             className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
             placeholder="vos@ejemplo.com"
           />
@@ -168,7 +185,11 @@ export function OnboardingScreen() {
         </div>
 
         {errorMessage ? (
-          <p className="text-[13px] text-[var(--red)]" role="alert">
+          <p
+            id={ONBOARDING_ERROR_ID}
+            className="text-[13px] text-[var(--red)]"
+            role="alert"
+          >
             {errorMessage}
           </p>
         ) : null}

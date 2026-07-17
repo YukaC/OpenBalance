@@ -5,6 +5,7 @@ import { isValidPinFormat, verifyPin } from "@/lib/pin-lock";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MS = 30_000;
+const UNLOCK_ERROR_ID = "unlock-pin-error";
 
 export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [pin, setPin] = useState("");
@@ -64,6 +65,8 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     }
   }
 
+  const hasError = Boolean(errorMessage);
+
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)] px-4 py-8">
       <form
@@ -105,14 +108,21 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
             onChange={(e) => {
               const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
               setPin(digits);
+              if (errorMessage) setErrorMessage("");
             }}
+            aria-invalid={hasError || undefined}
+            aria-describedby={hasError ? UNLOCK_ERROR_ID : undefined}
             className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-center text-[20px] tracking-[0.35em] outline-none focus:border-[var(--ink)]"
             autoFocus
           />
         </label>
 
         {errorMessage ? (
-          <p className="text-[13px] text-[var(--red)]" role="alert">
+          <p
+            id={UNLOCK_ERROR_ID}
+            className="text-[13px] text-[var(--red)]"
+            role="alert"
+          >
             {errorMessage}
           </p>
         ) : null}

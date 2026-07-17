@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { bindOverlayHistoryBack } from "@/lib/android-back";
 import { CurrencyProvider } from "@/lib/currency-context";
 import { startAutoSync, stopAutoSync } from "@/lib/auto-sync";
 import { isAuthEnabled } from "@/lib/auth-flags";
@@ -17,12 +18,9 @@ import {
   type AppSection,
 } from "@/lib/section-nav";
 import { useFinanceStore } from "@/store/finance-store";
-import { AuthScreen } from "@/components/AuthScreen";
-import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { PaydayLoadBanner } from "@/components/PaydayLoadBanner";
-import { PinUnlockScreen } from "@/components/PinUnlockScreen";
 import { AppToast } from "@/components/AppToast";
-import { TransactionForm } from "@/components/TransactionForm";
+import { SyncStatusChip } from "@/components/SyncStatusChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ViewSkeleton } from "@/components/ViewSkeleton";
 
@@ -32,7 +30,7 @@ function SectionLoading() {
 
 const CHUNK_RELOAD_KEY = "rinde-chunk-reload";
 
-function importWithChunkRetry<T extends { default: React.ComponentType }>(
+function importWithChunkRetry<T>(
   importer: () => Promise<T>,
 ): Promise<T> {
   return importer().catch((error: unknown) => {
@@ -72,6 +70,42 @@ const CategoriasView = dynamic(
 );
 const ConfiguracionView = dynamic(
   () => importWithChunkRetry(() => import("@/views/ConfiguracionView")),
+  { loading: SectionLoading },
+);
+const TransactionForm = dynamic(
+  () =>
+    importWithChunkRetry(() =>
+      import("@/components/TransactionForm").then((mod) => ({
+        default: mod.TransactionForm,
+      })),
+    ),
+  { loading: () => null },
+);
+const OnboardingScreen = dynamic(
+  () =>
+    importWithChunkRetry(() =>
+      import("@/components/OnboardingScreen").then((mod) => ({
+        default: mod.OnboardingScreen,
+      })),
+    ),
+  { loading: SectionLoading },
+);
+const AuthScreen = dynamic(
+  () =>
+    importWithChunkRetry(() =>
+      import("@/components/AuthScreen").then((mod) => ({
+        default: mod.AuthScreen,
+      })),
+    ),
+  { loading: SectionLoading },
+);
+const PinUnlockScreen = dynamic(
+  () =>
+    importWithChunkRetry(() =>
+      import("@/components/PinUnlockScreen").then((mod) => ({
+        default: mod.PinUnlockScreen,
+      })),
+    ),
   { loading: SectionLoading },
 );
 
@@ -242,6 +276,12 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isFormOpen, closeForm]);
 
+  // Soft Android back: history entry while form is open (needs @capacitor/app for full backButton).
+  useEffect(
+    () => bindOverlayHistoryBack(isFormOpen, closeForm),
+    [isFormOpen, closeForm],
+  );
+
   // Auto sync: immediately on login (with retries) + idle debounce after edits.
   useEffect(() => {
     if (!authEnabled || !hydrated) {
@@ -359,7 +399,10 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
             </nav>
 
             <div className="mt-auto flex shrink-0 flex-col gap-3">
-              <ThemeToggle />
+              <div className="flex items-center justify-between gap-2 px-1">
+                <SyncStatusChip />
+                <ThemeToggle />
+              </div>
               <SectionNavButton
                 href="/configuracion"
                 onNavigate={navigateToSection}
@@ -413,6 +456,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
               </span>
             </SectionNavButton>
             <div className="flex items-center gap-2">
+              <SyncStatusChip compact />
               <ThemeToggle compact />
               <SectionNavButton
                 href="/configuracion"

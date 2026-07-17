@@ -11,8 +11,9 @@ import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { formatMoney, parseMoneyInput } from "@/lib/format";
 import { sumExpenseByCategory } from "@/lib/summaries";
-import type { CategoryKind } from "@/lib/types";
+import type { Budget, Category, CategoryKind, Transaction, UserCategoryRule } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
+import { useToastStore } from "@/store/toast-store";
 
 const KIND_LABELS: Record<CategoryKind, string> = {
   fijo: "Fijo",
@@ -43,6 +44,7 @@ export default function CategoriasView() {
   const setBudget = useFinanceStore((s) => s.setBudget);
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
+  const showToast = useToastStore((s) => s.showToast);
 
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(DEFAULT_CATEGORY_EMOJI);
@@ -53,6 +55,8 @@ export default function CategoriasView() {
   );
   const [draftNames, setDraftNames] = useState<Record<string, string>>({});
   const [draftBudgets, setDraftBudgets] = useState<Record<string, string>>({});
+  const [nameErrors, setNameErrors] = useState<Record<string, string>>({});
+  const [budgetErrors, setBudgetErrors] = useState<Record<string, string>>({});
   const [editingIconCategoryId, setEditingIconCategoryId] = useState<
     string | null
   >(null);
@@ -114,7 +118,19 @@ export default function CategoriasView() {
     const raw = draftNames[id];
     if (raw === undefined) return;
     const trimmed = raw.trim();
-    if (!trimmed || trimmed === currentName) {
+    if (!trimmed) {
+      setNameErrors((prev) => ({
+        ...prev,
+        [id]: "El nombre no puede estar vacío.",
+      }));
+      return;
+    }
+    setNameErrors((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+    if (trimmed === currentName) {
       setDraftNames((prev) => {
         const copy = { ...prev };
         delete copy[id];
@@ -152,6 +168,47 @@ export default function CategoriasView() {
     setPendingRemove({ id: categoryId, name: categoryName, message: confirmMessage });
   }
 
+  function confirmRemoveCategory() {
+    if (!pendingRemove) return;
+
+    const categoryId = pendingRemove.id;
+    const state = useFinanceStore.getState();
+    const categorySnapshot = state.categories.find(
+      (category) => category.id === categoryId,
+    );
+    if (!categorySnapshot) {
+      setPendingRemove(null);
+      return;
+    }
+
+    const transactionSnapshots = state.transactions.filter(
+      (tx) => tx.categoryId === categoryId && isActive(tx),
+    );
+    const budgetSnapshots = state.budgets.filter(
+      (budget) => budget.categoryId === categoryId && isActive(budget),
+    );
+    const ruleSnapshots = state.userRules.filter(
+      (rule) => rule.categoryId === categoryId && isActive(rule),
+    );
+
+    removeCategory(categoryId);
+    setPendingRemove(null);
+
+    showToast({
+      message: "Categoría eliminada",
+      actionLabel: "Deshacer",
+      durationMs: 5000,
+      onAction: () => {
+        restoreCategoryRemoval({
+          category: categorySnapshot,
+          transactions: transactionSnapshots,
+          budgets: budgetSnapshots,
+          userRules: ruleSnapshots,
+        });
+      },
+    });
+  }
+
   function budgetValue(categoryId: string): string {
     if (draftBudgets[categoryId] !== undefined) return draftBudgets[categoryId];
     const limit = budgetByCategoryId.get(categoryId);
@@ -178,13 +235,35 @@ export default function CategoriasView() {
     if (raw === undefined) return;
     const trimmed = raw.trim();
     if (!trimmed) {
+      setBudgetErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[categoryId];
+        return copy;
+      });
       setBudget(categoryId, selectedMonth, 0);
-    } else {
-      const amount = parseMoneyInput(trimmed);
-      if (Number.isFinite(amount) && amount >= 0) {
-        setBudget(categoryId, selectedMonth, amount);
-      }
+      setDraftBudgets((prev) => {
+        const copy = { ...prev };
+        delete copy[categoryId];
+        return copy;
+      });
+      return;
     }
+
+    const amount = parseMoneyInput(trimmed);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setBudgetErrors((prev) => ({
+        ...prev,
+        [categoryId]: "Ingresá un monto válido.",
+      }));
+      return;
+    }
+
+    setBudgetErrors((prev) => {
+      const copy = { ...prev };
+      delete copy[categoryId];
+      return copy;
+    });
+    setBudget(categoryId, selectedMonth, amount);
     setDraftBudgets((prev) => {
       const copy = { ...prev };
       delete copy[categoryId];
@@ -224,6 +303,7 @@ export default function CategoriasView() {
         <div aria-label="Categorías guardadas">
           {activeCategories.map((category) => {
             const isEditingIcon = editingIconCategoryId === category.id;
+            const nameError = nameErrors[category.id];
             return (
               <article
                 key={category.id}
@@ -266,24 +346,47 @@ export default function CategoriasView() {
                     <span aria-hidden>{category.icon}</span>
                   </button>
 
-                  <input
-                    id={`category-name-${category.id}`}
-                    name={`categoryName-${category.id}`}
-                    autoComplete="off"
-                    value={categoryNameValue(category.id, category.name)}
-                    onChange={(e) =>
-                      setDraftNames((prev) => ({
-                        ...prev,
-                        [category.id]: e.target.value,
-                      }))
-                    }
-                    onBlur={() => handleSaveName(category.id, category.name)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.currentTarget.blur();
-                    }}
-                    aria-label={`Nombre de ${category.name}`}
-                    className="w-[7.5rem] shrink-0 rounded-xl border border-transparent bg-transparent px-1 py-1 text-[13.5px] font-semibold text-[var(--ink)] outline-none transition-soft focus:border-[var(--line)] focus:bg-[var(--surface-raised)] sm:w-28"
-                  />
+                  <div className="flex w-[7.5rem] shrink-0 flex-col gap-0.5 sm:w-28">
+                    <input
+                      id={`category-name-${category.id}`}
+                      name={`categoryName-${category.id}`}
+                      autoComplete="off"
+                      value={categoryNameValue(category.id, category.name)}
+                      onChange={(e) => {
+                        setDraftNames((prev) => ({
+                          ...prev,
+                          [category.id]: e.target.value,
+                        }));
+                        setNameErrors((prev) => {
+                          if (!prev[category.id]) return prev;
+                          const copy = { ...prev };
+                          delete copy[category.id];
+                          return copy;
+                        });
+                      }}
+                      onBlur={() => handleSaveName(category.id, category.name)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                      aria-label={`Nombre de ${category.name}`}
+                      aria-invalid={Boolean(nameError) || undefined}
+                      aria-describedby={
+                        nameError
+                          ? `category-name-error-${category.id}`
+                          : undefined
+                      }
+                      className="w-full rounded-xl border border-transparent bg-transparent px-1 py-1 text-[13.5px] font-semibold text-[var(--ink)] outline-none transition-soft focus:border-[var(--line)] focus:bg-[var(--surface-raised)]"
+                    />
+                    {nameError ? (
+                      <p
+                        id={`category-name-error-${category.id}`}
+                        className="px-1 text-[11px] text-[var(--red)]"
+                        role="alert"
+                      >
+                        {nameError}
+                      </p>
+                    ) : null}
+                  </div>
 
                   <button
                     type="button"
@@ -358,6 +461,7 @@ export default function CategoriasView() {
           {activeCategories.map((category) => {
             const limit = budgetByCategoryId.get(category.id);
             const spent = spentByCategoryId.get(category.id) ?? 0;
+            const budgetError = budgetErrors[category.id];
             return (
               <div
                 key={category.id}
@@ -368,7 +472,7 @@ export default function CategoriasView() {
                 </span>
                 <label
                   htmlFor={`budget-${category.id}`}
-                  className="flex min-w-0 flex-1 items-center gap-2"
+                  className="flex min-w-0 flex-1 flex-col gap-0.5"
                 >
                   <span className="sr-only">
                     Presupuesto de {category.name}
@@ -379,19 +483,40 @@ export default function CategoriasView() {
                     inputMode="decimal"
                     autoComplete="off"
                     value={budgetValue(category.id)}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setDraftBudgets((prev) => ({
                         ...prev,
                         [category.id]: e.target.value,
-                      }))
-                    }
+                      }));
+                      setBudgetErrors((prev) => {
+                        if (!prev[category.id]) return prev;
+                        const copy = { ...prev };
+                        delete copy[category.id];
+                        return copy;
+                      });
+                    }}
                     onBlur={() => handleSaveBudget(category.id)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") e.currentTarget.blur();
                     }}
                     placeholder="Sin tope"
+                    aria-invalid={Boolean(budgetError) || undefined}
+                    aria-describedby={
+                      budgetError
+                        ? `budget-error-${category.id}`
+                        : undefined
+                    }
                     className="min-h-10 w-full min-w-[7rem] rounded-xl border border-[var(--line)] bg-[var(--surface-raised)] px-2.5 py-2 font-mono text-[13px] outline-none transition-soft focus:border-[var(--select)]"
                   />
+                  {budgetError ? (
+                    <p
+                      id={`budget-error-${category.id}`}
+                      className="text-[11px] text-[var(--red)]"
+                      role="alert"
+                    >
+                      {budgetError}
+                    </p>
+                  ) : null}
                 </label>
                 {limit !== undefined && limit > 0 ? (
                   <span className="text-[11.5px] text-[var(--ink-soft)]">
@@ -496,12 +621,47 @@ export default function CategoriasView() {
         message={pendingRemove?.message ?? ""}
         confirmLabel="Quitar"
         isDestructive
-        onConfirm={() => {
-          if (pendingRemove) removeCategory(pendingRemove.id);
-          setPendingRemove(null);
-        }}
+        onConfirm={confirmRemoveCategory}
         onCancel={() => setPendingRemove(null)}
       />
     </div>
   );
+}
+
+function restoreCategoryRemoval(snapshot: {
+  category: Category;
+  transactions: Transaction[];
+  budgets: Budget[];
+  userRules: UserCategoryRule[];
+}) {
+  const transactionIds = new Set(
+    snapshot.transactions.map((transaction) => transaction.id),
+  );
+  const budgetIds = new Set(snapshot.budgets.map((budget) => budget.id));
+  const ruleIds = new Set(snapshot.userRules.map((rule) => rule.id));
+
+  useFinanceStore.setState((state) => ({
+    categories: state.categories.map((category) =>
+      category.id === snapshot.category.id
+        ? { ...snapshot.category, deletedAt: null }
+        : category,
+    ),
+    transactions: state.transactions.map((transaction) => {
+      if (!transactionIds.has(transaction.id)) return transaction;
+      const original = snapshot.transactions.find(
+        (item) => item.id === transaction.id,
+      );
+      return original ?? transaction;
+    }),
+    budgets: state.budgets.map((budget) => {
+      if (!budgetIds.has(budget.id)) return budget;
+      const original = snapshot.budgets.find((item) => item.id === budget.id);
+      return original ? { ...original, deletedAt: null } : budget;
+    }),
+    userRules: state.userRules.map((rule) => {
+      if (!ruleIds.has(rule.id)) return rule;
+      const original = snapshot.userRules.find((item) => item.id === rule.id);
+      return original ? { ...original, deletedAt: null } : rule;
+    }),
+  }));
 }

@@ -27,7 +27,11 @@ export function RecurringExpenseHint() {
   const cadenceLabel =
     suggestion.cadence === "monthly"
       ? "todos los meses"
-      : `los ${suggestion.weekdayLabel}s`;
+      : suggestion.cadence === "biweekly"
+        ? suggestion.weekdayLabel
+          ? `cada dos semanas los ${suggestion.weekdayLabel}s`
+          : "cada dos semanas"
+        : `los ${suggestion.weekdayLabel}s`;
 
   return (
     <section

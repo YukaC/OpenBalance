@@ -5,6 +5,7 @@
 
 type CapacitorLike = {
   isNativePlatform?: () => boolean;
+  getPlatform?: () => string;
 };
 
 function tryGetCapacitor(): CapacitorLike | null {
@@ -72,4 +73,43 @@ export function isMobileWebBrowser(): boolean {
 /** Show download banner only on mobile web, never inside the native app. */
 export function shouldShowDownloadAppBanner(): boolean {
   return isMobileWebBrowser() && !isRunningInNativeApp();
+}
+
+/**
+ * Capacitor platform string when available (`ios` / `android` / `web`).
+ * Returns null on SSR or when Capacitor is not present.
+ */
+export function getCapacitorPlatform(): string | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const capacitor = tryGetCapacitor();
+    const platform = capacitor?.getPlatform?.();
+    return typeof platform === "string" ? platform : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when Web Share API can share File objects (useful for backup export
+ * in mobile browsers and Capacitor WebViews without @capacitor/share).
+ */
+export function canShareFiles(): boolean {
+  if (typeof navigator === "undefined") return false;
+  if (typeof navigator.share !== "function") return false;
+  if (typeof File === "undefined") return false;
+
+  try {
+    const probeFile = new File(["x"], "probe.json", {
+      type: "application/json",
+    });
+    if (typeof navigator.canShare !== "function") {
+      // Older Safari: share exists but canShare may not — try files anyway.
+      return true;
+    }
+    return navigator.canShare({ files: [probeFile] });
+  } catch {
+    return false;
+  }
 }

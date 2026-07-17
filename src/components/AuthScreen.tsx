@@ -6,9 +6,11 @@ import { triggerLoginSync } from "@/lib/auto-sync";
 import { getApiBaseUrl } from "@/lib/auth-flags";
 
 type AuthTab = "login" | "register";
+type AuthErrorField = "name" | "email" | "password" | "credentials";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const API_BASE = getApiBaseUrl();
+const AUTH_ERROR_ID = "auth-error";
 
 export function AuthScreen() {
   const [activeTab, setActiveTab] = useState<AuthTab>("login");
@@ -16,7 +18,18 @@ export function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorField, setErrorField] = useState<AuthErrorField | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function setAuthError(message: string, field: AuthErrorField) {
+    setErrorMessage(message);
+    setErrorField(field);
+  }
+
+  function clearAuthError() {
+    setErrorMessage("");
+    setErrorField(null);
+  }
 
   async function handleRegister(): Promise<boolean> {
     const response = await fetch(`${API_BASE}/api/auth/register`, {
@@ -32,25 +45,32 @@ export function AuthScreen() {
 
     if (!response.ok) {
       let message = "No se pudo crear la cuenta.";
+      let field: AuthErrorField = "email";
       try {
         const payload = (await response.json()) as { error?: string };
         if (payload.error === "Email already registered") {
           message = "Ese email ya está registrado.";
+          field = "email";
         } else if (payload.error === "Password must be at least 8 characters") {
           message = "La contraseña debe tener al menos 8 caracteres.";
+          field = "password";
         } else if (payload.error === "Invalid email") {
           message = "Ingresá un email válido.";
+          field = "email";
         } else if (payload.error === "Name is required") {
           message = "Ingresá tu nombre para continuar.";
+          field = "name";
         } else if (payload.error === "Database unavailable") {
           message = "El servidor no está disponible todavía.";
+          field = "credentials";
         } else if (payload.error) {
           message = payload.error;
+          field = "credentials";
         }
       } catch {
         /* ignore */
       }
-      setErrorMessage(message);
+      setAuthError(message, field);
       return false;
     }
     return true;
@@ -64,10 +84,11 @@ export function AuthScreen() {
     });
 
     if (result?.error) {
-      setErrorMessage(
+      setAuthError(
         activeTab === "login"
           ? "Email o contraseña incorrectos."
           : "Cuenta creada, pero no se pudo iniciar sesión.",
+        "credentials",
       );
       return false;
     }
@@ -80,21 +101,21 @@ export function AuthScreen() {
     const trimmedEmail = email.trim();
     const trimmedName = name.trim();
 
+    if (activeTab === "register" && !trimmedName) {
+      setAuthError("Ingresá tu nombre para continuar.", "name");
+      return;
+    }
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      setErrorMessage("Ingresá un email válido.");
+      setAuthError("Ingresá un email válido.", "email");
       return;
     }
     if (password.length < 8) {
-      setErrorMessage("La contraseña debe tener al menos 8 caracteres.");
-      return;
-    }
-    if (activeTab === "register" && !trimmedName) {
-      setErrorMessage("Ingresá tu nombre para continuar.");
+      setAuthError("La contraseña debe tener al menos 8 caracteres.", "password");
       return;
     }
 
     setIsSubmitting(true);
-    setErrorMessage("");
+    clearAuthError();
     try {
       if (activeTab === "register") {
         const registered = await handleRegister();
@@ -102,13 +123,20 @@ export function AuthScreen() {
       }
       await handleCredentialsSignIn();
     } catch {
-      setErrorMessage(
+      setAuthError(
         "No se pudo conectar con el servidor. Revisá tu conexión.",
+        "credentials",
       );
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  const isNameInvalid = errorField === "name";
+  const isEmailInvalid =
+    errorField === "email" || errorField === "credentials";
+  const isPasswordInvalid =
+    errorField === "password" || errorField === "credentials";
 
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)] px-4 py-8">
@@ -144,7 +172,7 @@ export function AuthScreen() {
             aria-selected={activeTab === "login"}
             onClick={() => {
               setActiveTab("login");
-              setErrorMessage("");
+              clearAuthError();
             }}
             className={`flex-1 rounded-lg py-2 text-[13px] font-semibold transition-colors ${
               activeTab === "login"
@@ -160,7 +188,7 @@ export function AuthScreen() {
             aria-selected={activeTab === "register"}
             onClick={() => {
               setActiveTab("register");
-              setErrorMessage("");
+              clearAuthError();
             }}
             className={`flex-1 rounded-lg py-2 text-[13px] font-semibold transition-colors ${
               activeTab === "register"
@@ -184,6 +212,8 @@ export function AuthScreen() {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
+              aria-invalid={isNameInvalid || undefined}
+              aria-describedby={isNameInvalid ? AUTH_ERROR_ID : undefined}
               className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
               placeholder="Tu nombre"
             />
@@ -202,6 +232,8 @@ export function AuthScreen() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={isEmailInvalid || undefined}
+            aria-describedby={isEmailInvalid ? AUTH_ERROR_ID : undefined}
             className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
             placeholder="vos@ejemplo.com"
           />
@@ -222,13 +254,15 @@ export function AuthScreen() {
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={isPasswordInvalid || undefined}
+            aria-describedby={isPasswordInvalid ? AUTH_ERROR_ID : undefined}
             className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
             placeholder="Mínimo 8 caracteres"
           />
         </label>
 
         {errorMessage ? (
-          <p className="text-[13px] text-[var(--red)]" role="alert">
+          <p id={AUTH_ERROR_ID} className="text-[13px] text-[var(--red)]" role="alert">
             {errorMessage}
           </p>
         ) : null}

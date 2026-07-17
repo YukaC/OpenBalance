@@ -1,3 +1,8 @@
+import {
+  canShareFiles,
+  isMobileWebBrowser,
+  isRunningInNativeApp,
+} from "./device";
 import { ensureLifecycle } from "./entity-lifecycle";
 import type {
   Account,
@@ -198,14 +203,53 @@ export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
   };
 }
 
-export function downloadJsonFile(filename: string, data: unknown): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json;charset=utf-8",
-  });
+function downloadJsonViaAnchor(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Export JSON via Web Share (preferred on mobile / Capacitor WebView) then
+ * fall back to `<a download>`. Native filesystem save needs `@capacitor/filesystem`
+ * + `@capacitor/share` (not installed — see docs/MOBILE.md).
+ *
+ * `@capacitor/core` alone has no file I/O; we only use device detection from it.
+ */
+export async function downloadJsonFile(
+  filename: string,
+  data: unknown,
+): Promise<void> {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+
+  // Prefer share on mobile / Capacitor — `<a download>` is unreliable in WebViews.
+  // `@capacitor/core` has no file I/O; native save needs filesystem/share plugins (see MOBILE.md).
+  const shouldPreferShare =
+    canShareFiles() && (isRunningInNativeApp() || isMobileWebBrowser());
+
+  if (shouldPreferShare) {
+    try {
+      const file = new File([blob], filename, {
+        type: "application/json",
+      });
+      await navigator.share({
+        files: [file],
+        title: filename,
+      });
+      return;
+    } catch (error) {
+      // User dismissed the share sheet — do not force a download.
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+      // Share unsupported/failed — fall through to anchor download.
+    }
+  }
+
+  downloadJsonViaAnchor(filename, blob);
 }

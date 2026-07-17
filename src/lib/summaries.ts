@@ -1,5 +1,5 @@
-import { isWithinInterval, parseISO } from "date-fns";
-import type { Budget, Category, Transaction, Weekday } from "./types";
+import { format, isWithinInterval, parseISO } from "date-fns";
+import type { Account, Budget, Category, Transaction, Weekday } from "./types";
 import {
   formatMonthName,
   getAppToday,
@@ -45,6 +45,10 @@ export function isRecurringFixedExpense(transaction: Transaction): boolean {
   );
 }
 
+/**
+ * 1-based pay-week index for a fixed expense: stored `fixedPayWeekIndex` if set,
+ * otherwise inferred from `date` via `inferFixedPayWeekIndex` (clamped 1–4).
+ */
 export function resolveFixedPayWeekIndex(
   transaction: Transaction,
   paydayWeekday: Weekday = "viernes",
@@ -94,6 +98,11 @@ export function projectTransactionToMonth(
   };
 }
 
+/** Account-transfer leg — excluded from income/expense month summaries. */
+export function isTransferLeg(transaction: Transaction): boolean {
+  return Boolean(transaction.transferGroupId);
+}
+
 export function sumByType(
   transactions: Transaction[],
   type: Transaction["type"],
@@ -103,6 +112,7 @@ export function sumByType(
   let total = 0;
   for (const item of transactions) {
     if (!isActive(item)) continue;
+    if (isTransferLeg(item)) continue;
     if (item.type !== type) continue;
     if (currency && item.currency !== currency) continue;
     if (seenIds.has(item.id)) continue;
@@ -110,6 +120,144 @@ export function sumByType(
     total += item.amount;
   }
   return total;
+}
+
+export interface AccountLedgerTotals {
+  income: number;
+  expense: number;
+}
+
+/**
+ * Active-ledger totals for one account (same currency filter as the account).
+ * Includes transfer legs so account balances move correctly; month income/
+ * expense summaries use sumByType, which excludes them.
+ */
+export function sumByAccount(
+  transactions: Transaction[],
+  accountId: string,
+  currency?: "ARS" | "USD",
+): AccountLedgerTotals {
+  const seenIds = new Set<string>();
+  let income = 0;
+  let expense = 0;
+
+  for (const item of transactions) {
+    if (!isActive(item)) continue;
+    if (item.accountId !== accountId) continue;
+    if (currency && item.currency !== currency) continue;
+    if (seenIds.has(item.id)) continue;
+    seenIds.add(item.id);
+    if (item.type === "ingreso") income += item.amount;
+    else if (item.type === "gasto") expense += item.amount;
+  }
+
+  return { income, expense };
+}
+
+/**
+ * Account balance = openingBalance (default 0) + ingresos − gastos
+ * over the full active ledger for that accountId / account currency.
+ */
+export function computeAccountBalance(
+  account: Account,
+  transactions: Transaction[],
+): number {
+  const openingBalance = account.openingBalance ?? 0;
+  const { income, expense } = sumByAccount(
+    transactions,
+    account.id,
+    account.currency,
+  );
+  return openingBalance + income - expense;
+}
+
+export interface InstallmentDebtGroup {
+  installmentGroupId: string;
+  title: string;
+  currency: "ARS" | "USD";
+  remainingCount: number;
+  remainingAmount: number;
+  installmentCount: number;
+  /** Earliest remaining cuota date (ISO), if any. */
+  nextDate: string | null;
+}
+
+function installmentBaseTitle(title: string): string {
+  const stripped = title.replace(/\s*\(\d+\s*\/\s*\d+\)\s*$/u, "").trim();
+  return stripped.length > 0 ? stripped : title;
+}
+
+/**
+ * Pending credit-card installment debt grouped by installmentGroupId.
+ * Remaining = active cuotas with date ≥ today (relative to referenceToday).
+ */
+export function computeInstallmentDebt(
+  transactions: Transaction[],
+  referenceToday: Date = getAppToday(),
+): InstallmentDebtGroup[] {
+  const today = format(referenceToday, "yyyy-MM-dd");
+
+  type GroupBucket = {
+    title: string;
+    currency: "ARS" | "USD";
+    installmentCount: number;
+    remaining: Transaction[];
+  };
+
+  const groups = new Map<string, GroupBucket>();
+
+  for (const item of transactions) {
+    if (!isActive(item)) continue;
+    if (item.type !== "gasto") continue;
+    const groupId = item.installmentGroupId;
+    if (!groupId) continue;
+    if (item.installmentCount == null || item.installmentCount <= 1) {
+      continue;
+    }
+
+    let bucket = groups.get(groupId);
+    if (!bucket) {
+      bucket = {
+        title: installmentBaseTitle(item.title),
+        currency: item.currency,
+        installmentCount: item.installmentCount,
+        remaining: [],
+      };
+      groups.set(groupId, bucket);
+    } else if (item.installmentCount > bucket.installmentCount) {
+      bucket.installmentCount = item.installmentCount;
+    }
+
+    if (item.date >= today) {
+      bucket.remaining.push(item);
+    }
+  }
+
+  const result: InstallmentDebtGroup[] = [];
+  for (const [installmentGroupId, bucket] of groups) {
+    if (bucket.remaining.length === 0) continue;
+    bucket.remaining.sort((a, b) => a.date.localeCompare(b.date));
+    result.push({
+      installmentGroupId,
+      title: bucket.title,
+      currency: bucket.currency,
+      remainingCount: bucket.remaining.length,
+      remainingAmount: bucket.remaining.reduce(
+        (total, item) => total + item.amount,
+        0,
+      ),
+      installmentCount: bucket.installmentCount,
+      nextDate: bucket.remaining[0]?.date ?? null,
+    });
+  }
+
+  return result.sort((a, b) => {
+    if (a.nextDate && b.nextDate) {
+      const byDate = a.nextDate.localeCompare(b.nextDate);
+      if (byDate !== 0) return byDate;
+    }
+    return b.remainingAmount - a.remainingAmount;
+  });
 }
 
 export function filterByMonth(
@@ -249,6 +397,11 @@ export function buildMonthSummary(
   referenceToday: Date = getAppToday(),
   paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
+  /**
+   * I1 light: optional prefiltered pay-week txs for this month.
+   * When provided, skips re-scanning the full ledger for category breakdown.
+   */
+  prefilteredMonthTransactions?: Transaction[],
 ): MonthSummary {
   const weeks = getMonthWorkWeeks(
     monthKey,
@@ -277,13 +430,15 @@ export function buildMonthSummary(
   const expense = weeks.reduce((total, week) => total + week.expense, 0);
   const balance = income - expense;
 
-  const monthTx = filterByMonthPayWeeks(
-    transactions,
-    monthKey,
-    referenceToday,
-    paydayWeekday,
-    currency,
-  );
+  const monthTx =
+    prefilteredMonthTransactions ??
+    filterByMonthPayWeeks(
+      transactions,
+      monthKey,
+      referenceToday,
+      paydayWeekday,
+      currency,
+    );
 
   const prevKey = previousMonthKey(monthKey);
   const prevTx = filterByMonthPayWeeks(
@@ -298,6 +453,7 @@ export function buildMonthSummary(
 
   const expenseByCategory = new Map<string, number>();
   for (const item of monthTx) {
+    if (isTransferLeg(item)) continue;
     if (item.type !== "gasto" || !item.categoryId) continue;
     expenseByCategory.set(
       item.categoryId,
@@ -352,6 +508,8 @@ export function getHormigaDrainAlert(
     minTotal?: number;
     currency?: "ARS" | "USD";
     referenceToday?: Date;
+    /** I1 light: optional prefiltered month pay-week txs. */
+    prefilteredMonthTransactions?: Transaction[];
   },
 ): HormigaDrainAlert | null {
   const minOccurrences = opts?.minOccurrences ?? HORMIGA_MIN_OCCURRENCES;
@@ -363,13 +521,17 @@ export function getHormigaDrainAlert(
 
   const byCategory = new Map<string, { totalAmount: number; occurrenceCount: number }>();
 
-  for (const item of filterByMonthPayWeeks(
-    transactions,
-    monthKey,
-    opts?.referenceToday ?? getAppToday(),
-    paydayWeekday,
-    opts?.currency,
-  )) {
+  const monthTx =
+    opts?.prefilteredMonthTransactions ??
+    filterByMonthPayWeeks(
+      transactions,
+      monthKey,
+      opts?.referenceToday ?? getAppToday(),
+      paydayWeekday,
+      opts?.currency,
+    );
+
+  for (const item of monthTx) {
     if (item.type !== "gasto" || !item.categoryId) continue;
     const category = categoryById.get(item.categoryId);
     if (!category || category.kind !== "hormiga") continue;
@@ -418,15 +580,20 @@ export function sumExpenseByCategory(
   paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
   referenceToday: Date = getAppToday(),
+  /** I1 light: optional prefiltered month pay-week txs. */
+  prefilteredMonthTransactions?: Transaction[],
 ): Map<string, number> {
   const totals = new Map<string, number>();
-  for (const item of filterByMonthPayWeeks(
-    transactions,
-    monthKey,
-    referenceToday,
-    paydayWeekday,
-    currency,
-  )) {
+  const monthTx =
+    prefilteredMonthTransactions ??
+    filterByMonthPayWeeks(
+      transactions,
+      monthKey,
+      referenceToday,
+      paydayWeekday,
+      currency,
+    );
+  for (const item of monthTx) {
     if (item.type !== "gasto" || !item.categoryId) continue;
     totals.set(
       item.categoryId,

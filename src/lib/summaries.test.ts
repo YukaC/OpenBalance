@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildMonthSummary,
+  computeAccountBalance,
+  computeInstallmentDebt,
   filterByMonth,
   findBudgetAlerts,
   findCategorySpendAlerts,
+  sumByAccount,
   sumByType,
   sumExpenseByCategory,
 } from "./summaries";
-import type { Budget, Category, Transaction } from "./types";
+import type { Account, Budget, Category, Transaction } from "./types";
 
 function makeTx(
   overrides: Partial<Transaction> &
@@ -127,6 +130,46 @@ describe("sumByType", () => {
     assert.equal(sumByType(txs, "gasto", "ARS"), 10);
     assert.equal(sumByType(txs, "gasto", "USD"), 20);
     assert.equal(sumByType(txs, "ingreso", "ARS"), 50);
+  });
+
+  it("excludes transfer legs from income and expense totals", () => {
+    const groupId = "xfer-1";
+    const txs = [
+      makeTx({
+        id: "real-income",
+        type: "ingreso",
+        amount: 100,
+        month: "2026-01",
+        date: "2026-01-01",
+      }),
+      makeTx({
+        id: "real-expense",
+        type: "gasto",
+        amount: 40,
+        month: "2026-01",
+        date: "2026-01-02",
+      }),
+      makeTx({
+        id: "xfer-out",
+        type: "gasto",
+        amount: 25,
+        month: "2026-01",
+        date: "2026-01-03",
+        transferGroupId: groupId,
+        accountId: "acc-a",
+      }),
+      makeTx({
+        id: "xfer-in",
+        type: "ingreso",
+        amount: 25,
+        month: "2026-01",
+        date: "2026-01-03",
+        transferGroupId: groupId,
+        accountId: "acc-b",
+      }),
+    ];
+    assert.equal(sumByType(txs, "ingreso"), 100);
+    assert.equal(sumByType(txs, "gasto"), 40);
   });
 });
 
@@ -329,5 +372,212 @@ describe("buildMonthSummary", () => {
     assert.equal(summary.weeks[3].expense, 150_000);
     assert.equal(summary.weeks[4]?.expense ?? 0, 0);
     assert.equal(summary.expense, 300_000);
+  });
+
+  it("uses prefiltered month transactions for category breakdown (I1)", () => {
+    const txs = [
+      makeTx({
+        id: "hidden",
+        type: "gasto",
+        amount: 999,
+        month: "2026-07",
+        date: "2026-07-10",
+        categoryId: "cat-comida",
+      }),
+    ];
+    const prefiltered = [
+      makeTx({
+        id: "shown",
+        type: "gasto",
+        amount: 40,
+        month: "2026-07",
+        date: "2026-07-10",
+        categoryId: "cat-comida",
+      }),
+    ];
+    const summary = buildMonthSummary(
+      txs,
+      categories,
+      "2026-07",
+      new Date(2026, 6, 16),
+      "sabado",
+      "ARS",
+      prefiltered,
+    );
+    assert.equal(summary.byCategory.length, 1);
+    assert.equal(summary.byCategory[0].amount, 40);
+  });
+});
+
+describe("sumByAccount / computeAccountBalance", () => {
+  const account: Account = {
+    id: "acc-1",
+    name: "Principal",
+    currency: "ARS",
+    openingBalance: 1000,
+  };
+
+  it("sums income and expense for the account and currency", () => {
+    const txs = [
+      makeTx({
+        id: "in",
+        type: "ingreso",
+        amount: 500,
+        month: "2026-01",
+        date: "2026-01-01",
+        accountId: "acc-1",
+      }),
+      makeTx({
+        id: "out",
+        type: "gasto",
+        amount: 200,
+        month: "2026-01",
+        date: "2026-01-02",
+        accountId: "acc-1",
+      }),
+      makeTx({
+        id: "other-acc",
+        type: "gasto",
+        amount: 50,
+        month: "2026-01",
+        date: "2026-01-03",
+        accountId: "acc-2",
+      }),
+      makeTx({
+        id: "usd",
+        type: "gasto",
+        amount: 10,
+        month: "2026-01",
+        date: "2026-01-04",
+        accountId: "acc-1",
+        currency: "USD",
+      }),
+      makeTx({
+        id: "gone",
+        type: "gasto",
+        amount: 999,
+        month: "2026-01",
+        date: "2026-01-05",
+        accountId: "acc-1",
+        deletedAt: "2026-01-06T00:00:00.000Z",
+      }),
+    ];
+
+    assert.deepEqual(sumByAccount(txs, "acc-1", "ARS"), {
+      income: 500,
+      expense: 200,
+    });
+    assert.equal(computeAccountBalance(account, txs), 1300);
+  });
+
+  it("defaults openingBalance to 0", () => {
+    const bare: Account = {
+      id: "acc-1",
+      name: "Principal",
+      currency: "ARS",
+    };
+    const txs = [
+      makeTx({
+        id: "in",
+        type: "ingreso",
+        amount: 100,
+        month: "2026-01",
+        date: "2026-01-01",
+        accountId: "acc-1",
+      }),
+    ];
+    assert.equal(computeAccountBalance(bare, txs), 100);
+  });
+});
+
+describe("computeInstallmentDebt", () => {
+  it("groups remaining future cuotas by installmentGroupId", () => {
+    const txs = [
+      makeTx({
+        id: "c1",
+        type: "gasto",
+        amount: 100,
+        month: "2026-01",
+        date: "2026-01-10",
+        title: "Notebook (1/3)",
+        installmentGroupId: "g1",
+        installmentIndex: 1,
+        installmentCount: 3,
+      }),
+      makeTx({
+        id: "c2",
+        type: "gasto",
+        amount: 100,
+        month: "2026-02",
+        date: "2026-02-10",
+        title: "Notebook (2/3)",
+        installmentGroupId: "g1",
+        installmentIndex: 2,
+        installmentCount: 3,
+      }),
+      makeTx({
+        id: "c3",
+        type: "gasto",
+        amount: 100,
+        month: "2026-03",
+        date: "2026-03-10",
+        title: "Notebook (3/3)",
+        installmentGroupId: "g1",
+        installmentIndex: 3,
+        installmentCount: 3,
+      }),
+      makeTx({
+        id: "deleted-future",
+        type: "gasto",
+        amount: 50,
+        month: "2026-04",
+        date: "2026-04-10",
+        title: "Gone (1/2)",
+        installmentGroupId: "g2",
+        installmentIndex: 1,
+        installmentCount: 2,
+        deletedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    ];
+
+    const debt = computeInstallmentDebt(txs, new Date(2026, 1, 1));
+    assert.equal(debt.length, 1);
+    assert.equal(debt[0].installmentGroupId, "g1");
+    assert.equal(debt[0].title, "Notebook");
+    assert.equal(debt[0].remainingCount, 2);
+    assert.equal(debt[0].remainingAmount, 200);
+    assert.equal(debt[0].installmentCount, 3);
+    assert.equal(debt[0].nextDate, "2026-02-10");
+  });
+
+  it("returns empty when all cuotas are in the past", () => {
+    const txs = [
+      makeTx({
+        id: "c1",
+        type: "gasto",
+        amount: 100,
+        month: "2026-01",
+        date: "2026-01-10",
+        title: "Done (1/2)",
+        installmentGroupId: "g1",
+        installmentIndex: 1,
+        installmentCount: 2,
+      }),
+      makeTx({
+        id: "c2",
+        type: "gasto",
+        amount: 100,
+        month: "2026-02",
+        date: "2026-02-10",
+        title: "Done (2/2)",
+        installmentGroupId: "g1",
+        installmentIndex: 2,
+        installmentCount: 2,
+      }),
+    ];
+    assert.deepEqual(
+      computeInstallmentDebt(txs, new Date(2026, 2, 1)),
+      [],
+    );
   });
 });

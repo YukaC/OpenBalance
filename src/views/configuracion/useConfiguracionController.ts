@@ -4,17 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { downloadJsonFile, parseFinanceBackup } from "@/lib/backup";
 import { parseTransactionsCsv } from "@/lib/csv-io";
 import { isActive } from "@/lib/entity-lifecycle";
+import { todayIso } from "@/lib/dates";
 import type { CurrencyCode } from "@/lib/format";
-import { METHOD_LABELS } from "@/lib/format";
+import { METHOD_LABELS, parseMoneyInput } from "@/lib/format";
 import {
-  clearPin,
+  disablePinWithVerification,
   isPinEnabled,
   isValidPinFormat,
   setPin,
   verifyPin,
 } from "@/lib/pin-lock";
 import { initialsFromName } from "@/lib/profile-setup";
-import { useFinanceStore } from "@/store/finance-store";
+import { touchFinancePersist, useFinanceStore } from "@/store/finance-store";
 
 function escapeCsv(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -46,6 +47,7 @@ export function useConfiguracionController() {
   const restoreBackup = useFinanceStore((s) => s.restoreBackup);
   const addAccount = useFinanceStore((s) => s.addAccount);
   const removeAccount = useFinanceStore((s) => s.removeAccount);
+  const addTransfer = useFinanceStore((s) => s.addTransfer);
 
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
@@ -63,6 +65,10 @@ export function useConfiguracionController() {
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountCurrency, setNewAccountCurrency] =
     useState<CurrencyCode>("ARS");
+  const [transferFromAccountId, setTransferFromAccountId] = useState("");
+  const [transferToAccountId, setTransferToAccountId] = useState("");
+  const [transferAmount, setTransferAmount] = useState("");
+  const [transferDate, setTransferDate] = useState(todayIso());
   const [pendingConfirm, setPendingConfirm] =
     useState<ConfigConfirmPending | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +82,20 @@ export function useConfiguracionController() {
   useEffect(() => {
     setEmail(profile.email);
   }, [profile.email]);
+
+  useEffect(() => {
+    const active = accounts.filter(isActive);
+    if (active.length === 0) return;
+    if (!active.some((account) => account.id === transferFromAccountId)) {
+      setTransferFromAccountId(active[0].id);
+    }
+    if (!active.some((account) => account.id === transferToAccountId)) {
+      const fallback =
+        active.find((account) => account.id !== transferFromAccountId) ??
+        active[0];
+      setTransferToAccountId(fallback.id);
+    }
+  }, [accounts, transferFromAccountId, transferToAccountId]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -213,9 +233,9 @@ export function useConfiguracionController() {
     if (csvInputRef.current) csvInputRef.current.value = "";
   }
 
-  function handleExportBackup() {
+  async function handleExportBackup() {
     const payload = exportBackup();
-    downloadJsonFile(
+    await downloadJsonFile(
       `rinde-respaldo-${payload.exportedAt.slice(0, 10)}.json`,
       payload,
     );
@@ -246,6 +266,26 @@ export function useConfiguracionController() {
     addAccount({ name: trimmed, currency: newAccountCurrency });
     setNewAccountName("");
     setNewAccountCurrency(profile.defaultCurrency);
+  }
+
+  function handleAddTransfer(event: React.FormEvent) {
+    event.preventDefault();
+    const amount = parseMoneyInput(transferAmount);
+    if (
+      !(amount > 0) ||
+      !transferFromAccountId ||
+      !transferToAccountId ||
+      transferFromAccountId === transferToAccountId
+    ) {
+      return;
+    }
+    addTransfer({
+      fromAccountId: transferFromAccountId,
+      toAccountId: transferToAccountId,
+      amount,
+      date: transferDate || todayIso(),
+    });
+    setTransferAmount("");
   }
 
   function handleReset() {
@@ -318,6 +358,8 @@ export function useConfiguracionController() {
     setIsSavingPin(true);
     try {
       await setPin(newPin);
+      // setPin loads session key — rewrite finance blob as ciphertext.
+      touchFinancePersist();
       setPinEnabled(true);
       setNewPin("");
       setConfirmPin("");
@@ -335,12 +377,13 @@ export function useConfiguracionController() {
       setPinError("Ingresá el PIN actual (4–6 dígitos) para desactivarlo.");
       return;
     }
-    const isCurrentValid = await verifyPin(currentPin);
-    if (!isCurrentValid) {
+    const didDisable = await disablePinWithVerification(currentPin);
+    if (!didDisable) {
       setPinError("PIN actual incorrecto.");
       return;
     }
-    clearPin();
+    // Session key cleared — next persist write stores plaintext.
+    touchFinancePersist();
     setPinEnabled(false);
     setCurrentPin("");
     setNewPin("");
@@ -364,6 +407,7 @@ export function useConfiguracionController() {
     hydrated,
     profile,
     accounts: accounts.filter(isActive),
+    transactions,
     name,
     setName,
     email,
@@ -384,6 +428,14 @@ export function useConfiguracionController() {
     setNewAccountName,
     newAccountCurrency,
     setNewAccountCurrency,
+    transferFromAccountId,
+    setTransferFromAccountId,
+    transferToAccountId,
+    setTransferToAccountId,
+    transferAmount,
+    setTransferAmount,
+    transferDate,
+    setTransferDate,
     csvInputRef,
     backupInputRef,
     updateProfile,
@@ -396,6 +448,7 @@ export function useConfiguracionController() {
     handleRestoreBackup,
     handleRemoveAccount,
     handleAddAccount,
+    handleAddTransfer,
     handleReset,
     pendingConfirm,
     confirmPending,

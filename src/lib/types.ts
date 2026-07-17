@@ -42,12 +42,16 @@ export interface UserProfile extends SyncLifecycle {
   defaultAccountId?: string;
   /** Remind to load income on payday (in-app + optional Web Notification). */
   shouldRemindPaydayLoad: boolean;
+  /** Optional monthly savings target (same unit as defaultCurrency). */
+  monthlySavingsGoal?: number | null;
 }
 
 export interface Account extends SyncLifecycle {
   id: string;
   name: string;
   currency: "ARS" | "USD";
+  /** Starting ledger balance; omitted/undefined treated as 0. */
+  openingBalance?: number;
 }
 
 export interface Budget extends SyncLifecycle {
@@ -84,7 +88,15 @@ export interface Transaction extends SyncLifecycle {
   incomeSourceId: string | null;
   accountId?: string | null;
   note: string;
+  /**
+   * ISO week of `date` (`YYYY-Www`, via `toWeekIso`). Derived at write time;
+   * pay-week filtering uses date bounds from `getMonthWorkWeeks`, not this alone.
+   */
   weekIso: string;
+  /**
+   * Calendar month of `date` (`YYYY-MM`). Recurring fixed expenses may be
+   * projected onto later months via `projectTransactionToMonth`.
+   */
   month: string;
   origin: LoadOrigin;
   title: string;
@@ -105,6 +117,11 @@ export interface Transaction extends SyncLifecycle {
   installmentIndex?: number | null;
   /** Total cuotas in the series. */
   installmentCount?: number | null;
+  /**
+   * Links the paired legs of an account transfer (gasto + ingreso).
+   * Soft-delete always removes both legs together.
+   */
+  transferGroupId?: string | null;
 }
 
 export interface UserCategoryRule extends SyncLifecycle {

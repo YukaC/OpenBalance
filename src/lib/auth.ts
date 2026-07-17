@@ -4,6 +4,30 @@ import { eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db";
 import { users } from "@/db/schema";
 import { verifyPassword } from "@/lib/auth-password";
+import {
+  consumeRateLimit,
+  getClientIp,
+  isRateLimitExceeded,
+  LOGIN_FAILED_RATE_LIMIT,
+  RATE_LIMIT_WINDOW_MS,
+  resetRateLimit,
+} from "@/lib/rate-limit";
+
+export function isAuthSecretConfigured(): boolean {
+  return Boolean(process.env.AUTH_SECRET?.trim());
+}
+
+/** Throws with a clear message when AUTH_SECRET is missing. */
+export function assertAuthSecret(): void {
+  if (isAuthSecretConfigured()) return;
+  throw new Error(
+    "AUTH_SECRET is not configured. Set AUTH_SECRET in the environment, then restart.",
+  );
+}
+
+function loginRateLimitKey(ip: string, email: string): string {
+  return `login:${ip}:${email}`;
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // Explicit so missing Vercel env fails clearly instead of opaque 500s.
@@ -17,7 +41,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
+        assertAuthSecret();
+
         if (!isDatabaseConfigured()) {
           return null;
         }
@@ -31,6 +57,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!email || !password) return null;
 
+        const ip =
+          request instanceof Request ? getClientIp(request) : "unknown";
+        const rateKey = loginRateLimitKey(ip, email);
+
+        if (isRateLimitExceeded(rateKey, LOGIN_FAILED_RATE_LIMIT)) {
+          return null;
+        }
+
         const db = getDb();
         const [user] = await db
           .select()
@@ -38,10 +72,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .where(eq(users.email, email))
           .limit(1);
 
-        if (!user) return null;
+        if (!user) {
+          consumeRateLimit(
+            rateKey,
+            LOGIN_FAILED_RATE_LIMIT,
+            RATE_LIMIT_WINDOW_MS,
+          );
+          return null;
+        }
 
         const isValid = await verifyPassword(password, user.passwordHash);
-        if (!isValid) return null;
+        if (!isValid) {
+          consumeRateLimit(
+            rateKey,
+            LOGIN_FAILED_RATE_LIMIT,
+            RATE_LIMIT_WINDOW_MS,
+          );
+          return null;
+        }
+
+        resetRateLimit(rateKey);
 
         return {
           id: user.id,

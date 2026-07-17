@@ -33,6 +33,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test
+        run: pnpm test
+        env:
+          AUTH_SECRET: ci-test-secret-not-for-production
+
       - name: Typecheck
         run: pnpm typecheck
         env:

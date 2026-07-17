@@ -8,6 +8,7 @@ import { METHOD_LABELS, formatMoney, parseMoneyInput, roundAmountForCurrency } f
 import { isActive } from "@/lib/entity-lifecycle";
 import { detectRecurringIncomeHint } from "@/lib/recurring-income";
 import type { PaymentMethod, TransactionType } from "@/lib/types";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import { useFinanceStore } from "@/store/finance-store";
 import { useToastStore } from "@/store/toast-store";
 
@@ -56,10 +57,11 @@ export function TransactionForm() {
 
   const isEditing = Boolean(editingTransactionId);
   const panelRef = useRef<HTMLDivElement>(null);
-  const previousActiveElementRef = useRef<HTMLElement | null>(null);
   const [type, setType] = useState<TransactionType>(formPrefillType);
   const [amount, setAmount] = useState("");
   const [amountError, setAmountError] = useState(false);
+  const [dateError, setDateError] = useState(false);
+  const [categoryError, setCategoryError] = useState(false);
   const [date, setDate] = useState(formPrefillDate ?? todayIso);
   const [method, setMethod] = useState<PaymentMethod>("transferencia");
   const [categoryId, setCategoryId] = useState<string>("");
@@ -148,50 +150,27 @@ export function TransactionForm() {
   }, [editingTransactionId]);
 
   useEffect(() => {
-    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
-
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const panel = panelRef.current;
-    const focusable = panel?.querySelector<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    focusable?.focus();
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Tab" || !panel) return;
-      const nodes = panel.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      const list = [...nodes].filter((node) => !node.hasAttribute("disabled"));
-      if (list.length === 0) return;
-      const first = list[0];
-      const last = list[list.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-      const previousElement = previousActiveElementRef.current;
-      if (
-        previousElement &&
-        typeof previousElement.focus === "function" &&
-        document.contains(previousElement)
-      ) {
-        previousElement.focus();
-      } else {
-        document.querySelector<HTMLElement>(".fab-button")?.focus();
-      }
     };
   }, []);
+
+  function requestClose() {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    window.setTimeout(() => {
+      closeForm();
+    }, 150);
+  }
+
+  useFocusTrap({
+    containerRef: panelRef,
+    isActive: true,
+    onEscape: requestClose,
+    fallbackFocusSelector: ".fab-button",
+  });
 
   useEffect(() => {
     if (type !== "gasto") {
@@ -225,14 +204,6 @@ export function TransactionForm() {
     setIsRecurringHintDismissed(false);
     setDidMarkRecurring(false);
   }, [incomeSourceId, amount, date]);
-
-  function requestClose() {
-    if (isLeaving) return;
-    setIsLeaving(true);
-    window.setTimeout(() => {
-      closeForm();
-    }, 150);
-  }
 
   const amountNumber = parseMoneyInput(amount);
   const recurringSuggestion = useMemo(() => {
@@ -278,11 +249,17 @@ export function TransactionForm() {
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (isLeaving || isSubmittingRef.current) return;
-    if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
-      setAmountError(true);
-      return;
-    }
-    setAmountError(false);
+
+    const isAmountInvalid = !Number.isFinite(amountNumber) || amountNumber <= 0;
+    const isDateInvalid = !date.trim();
+    const isCategoryInvalid = type === "gasto" && !categoryId;
+
+    setAmountError(isAmountInvalid);
+    setDateError(isDateInvalid);
+    setCategoryError(isCategoryInvalid);
+
+    if (isAmountInvalid || isDateInvalid || isCategoryInvalid) return;
+
     isSubmittingRef.current = true;
 
     const resolvedTitle =
@@ -428,12 +405,16 @@ export function TransactionForm() {
                 setAmountError(false);
               }}
               placeholder="Ej. 270.000"
-              required
               aria-invalid={amountError || undefined}
+              aria-describedby={amountError ? "tx-amount-error" : undefined}
               className="w-full rounded-[var(--radius-md)] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 font-mono text-[22px] font-semibold text-[var(--ink)] outline-none transition-soft placeholder:text-[var(--ink-faint)] focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--card)] focus:border-[var(--select)]"
             />
             {amountError ? (
-              <p className="text-[12.5px] text-[var(--red)]" role="alert">
+              <p
+                id="tx-amount-error"
+                className="text-[12.5px] text-[var(--red)]"
+                role="alert"
+              >
                 Ingresá un monto válido.
               </p>
             ) : Number.isFinite(amountNumber) && amountNumber > 0 ? (
@@ -474,10 +455,23 @@ export function TransactionForm() {
                 type="date"
                 autoComplete="off"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setDateError(false);
+                }}
+                aria-invalid={dateError || undefined}
+                aria-describedby={dateError ? "tx-date-error" : undefined}
                 className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--card)] focus:border-[var(--select)]"
               />
+              {dateError ? (
+                <p
+                  id="tx-date-error"
+                  className="text-[12.5px] text-[var(--red)]"
+                  role="alert"
+                >
+                  Elegí una fecha.
+                </p>
+              ) : null}
             </label>
 
             <label htmlFor="tx-method" className="flex flex-col gap-1.5">
@@ -637,8 +631,12 @@ export function TransactionForm() {
                   setCategoryId(e.target.value);
                   setHasManualCategoryOverride(true);
                   setAutoSuggested(false);
+                  setCategoryError(false);
                 }}
-                required
+                aria-invalid={categoryError || undefined}
+                aria-describedby={
+                  categoryError ? "tx-category-error" : undefined
+                }
                 className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-[11px] text-[14px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--card)] focus:border-[var(--select)]"
               >
                 <option value="">Elegir categoría</option>
@@ -648,6 +646,15 @@ export function TransactionForm() {
                   </option>
                 ))}
               </select>
+              {categoryError ? (
+                <p
+                  id="tx-category-error"
+                  className="text-[12.5px] text-[var(--red)]"
+                  role="alert"
+                >
+                  Elegí una categoría.
+                </p>
+              ) : null}
             </label>
           )}
 
@@ -719,8 +726,9 @@ export function TransactionForm() {
           {showRecurringHint && recurringSuggestion ? (
             <div className="mb-3.5 -mt-1.5 rounded-lg bg-[var(--gold-soft)] px-2.5 py-2 text-[11.5px] text-[var(--gold)]">
               <p>
-                Cargaste esto varios {recurringSuggestion.weekdayLabel}s
-                seguidos — ¿lo marco como ingreso recurrente?
+                {recurringSuggestion.matchKind === "dayOfMonth"
+                  ? `Cargaste esto varios meses el ${recurringSuggestion.weekdayLabel} — ¿lo marco como ingreso recurrente?`
+                  : `Cargaste esto varios ${recurringSuggestion.weekdayLabel}s seguidos — ¿lo marco como ingreso recurrente?`}
               </p>
               <div className="mt-2 flex gap-2">
                 <button

@@ -8,20 +8,38 @@ export function suggestCategoryId(
   const normalized = text.trim().toLowerCase();
   if (!normalized) return { categoryId: null, isAuto: false };
 
+  let bestRuleMatch: { categoryId: string; length: number } | null = null;
   for (const rule of userRules) {
-    if (normalized.includes(rule.pattern.toLowerCase())) {
-      return { categoryId: rule.categoryId, isAuto: true };
+    const pattern = rule.pattern.toLowerCase().trim();
+    if (!pattern) continue;
+    if (!normalized.includes(pattern)) continue;
+    if (!bestRuleMatch || pattern.length > bestRuleMatch.length) {
+      bestRuleMatch = { categoryId: rule.categoryId, length: pattern.length };
     }
   }
+  if (bestRuleMatch) {
+    return { categoryId: bestRuleMatch.categoryId, isAuto: true };
+  }
 
+  let bestKeywordMatch: { categoryId: string; length: number } | null = null;
   for (const category of categories) {
     for (const keyword of category.keywords) {
       const normalizedKeyword = keyword.toLowerCase().trim();
       if (normalizedKeyword.length < 3) continue;
-      if (normalized.includes(normalizedKeyword)) {
-        return { categoryId: category.id, isAuto: true };
+      if (!normalized.includes(normalizedKeyword)) continue;
+      if (
+        !bestKeywordMatch ||
+        normalizedKeyword.length > bestKeywordMatch.length
+      ) {
+        bestKeywordMatch = {
+          categoryId: category.id,
+          length: normalizedKeyword.length,
+        };
       }
     }
+  }
+  if (bestKeywordMatch) {
+    return { categoryId: bestKeywordMatch.categoryId, isAuto: true };
   }
 
   return { categoryId: null, isAuto: false };

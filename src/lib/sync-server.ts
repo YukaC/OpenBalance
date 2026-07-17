@@ -94,6 +94,7 @@ function mapProfile(row: ProfileRow): SyncProfile {
     isSetupComplete: row.isSetupComplete,
     defaultAccountId: row.defaultAccountId ?? undefined,
     shouldRemindPaydayLoad: row.shouldRemindPaydayLoad,
+    monthlySavingsGoal: row.monthlySavingsGoal ?? undefined,
     updatedAt: row.updatedAt.toISOString(),
     deletedAt: toIso(row.deletedAt),
   };
@@ -176,6 +177,7 @@ function mapTransaction(row: TransactionRow): SyncTransaction {
     installmentGroupId: row.installmentGroupId,
     installmentIndex: row.installmentIndex,
     installmentCount: row.installmentCount,
+    transferGroupId: row.transferGroupId,
     updatedAt: row.updatedAt.toISOString(),
     deletedAt: toIso(row.deletedAt),
   };
@@ -211,6 +213,10 @@ async function upsertProfile(
     isSetupComplete: profile.isSetupComplete ?? false,
     defaultAccountId: profile.defaultAccountId ?? null,
     shouldRemindPaydayLoad: profile.shouldRemindPaydayLoad,
+    monthlySavingsGoal:
+      profile.monthlySavingsGoal != null && profile.monthlySavingsGoal > 0
+        ? profile.monthlySavingsGoal
+        : null,
     updatedAt,
     deletedAt,
   };
@@ -464,6 +470,7 @@ async function upsertTransaction(
     installmentGroupId: transaction.installmentGroupId ?? null,
     installmentIndex: transaction.installmentIndex ?? null,
     installmentCount: transaction.installmentCount ?? null,
+    transferGroupId: transaction.transferGroupId ?? null,
     updatedAt,
     deletedAt,
   };
@@ -489,28 +496,32 @@ export async function applyIncomingChanges(
   changes: SyncChanges,
   now: Date = new Date(),
 ): Promise<void> {
-  if (changes.profile) {
-    await upsertProfile(db, userId, changes.profile, now);
-  }
+  await db.transaction(async (tx) => {
+    const executor = tx as unknown as AppDatabase;
 
-  for (const account of changes.accounts ?? []) {
-    await upsertAccount(db, userId, account, now);
-  }
-  for (const category of changes.categories ?? []) {
-    await upsertCategory(db, userId, category, now);
-  }
-  for (const source of changes.incomeSources ?? []) {
-    await upsertIncomeSource(db, userId, source, now);
-  }
-  for (const budget of changes.budgets ?? []) {
-    await upsertBudget(db, userId, budget, now);
-  }
-  for (const rule of changes.userRules ?? []) {
-    await upsertUserRule(db, userId, rule, now);
-  }
-  for (const transaction of changes.transactions ?? []) {
-    await upsertTransaction(db, userId, transaction, now);
-  }
+    if (changes.profile) {
+      await upsertProfile(executor, userId, changes.profile, now);
+    }
+
+    for (const account of changes.accounts ?? []) {
+      await upsertAccount(executor, userId, account, now);
+    }
+    for (const category of changes.categories ?? []) {
+      await upsertCategory(executor, userId, category, now);
+    }
+    for (const source of changes.incomeSources ?? []) {
+      await upsertIncomeSource(executor, userId, source, now);
+    }
+    for (const budget of changes.budgets ?? []) {
+      await upsertBudget(executor, userId, budget, now);
+    }
+    for (const rule of changes.userRules ?? []) {
+      await upsertUserRule(executor, userId, rule, now);
+    }
+    for (const transaction of changes.transactions ?? []) {
+      await upsertTransaction(executor, userId, transaction, now);
+    }
+  });
 }
 
 function sinceFilter(lastSyncedAt: string | null) {
@@ -579,16 +590,101 @@ export async function collectOutgoingChanges(
   };
 }
 
+type IncomingEntityIds = {
+  profileId: string | null;
+  accountIds: Set<string>;
+  categoryIds: Set<string>;
+  incomeSourceIds: Set<string>;
+  budgetIds: Set<string>;
+  userRuleIds: Set<string>;
+  transactionIds: Set<string>;
+};
+
+/** Ids present in the client's push payload for this request (echo exclusion). */
+function collectIncomingEntityIds(changes: SyncChanges): IncomingEntityIds {
+  return {
+    profileId: changes.profile?.id ?? null,
+    accountIds: new Set((changes.accounts ?? []).map((entity) => entity.id)),
+    categoryIds: new Set((changes.categories ?? []).map((entity) => entity.id)),
+    incomeSourceIds: new Set(
+      (changes.incomeSources ?? []).map((entity) => entity.id),
+    ),
+    budgetIds: new Set((changes.budgets ?? []).map((entity) => entity.id)),
+    userRuleIds: new Set((changes.userRules ?? []).map((entity) => entity.id)),
+    transactionIds: new Set(
+      (changes.transactions ?? []).map((entity) => entity.id),
+    ),
+  };
+}
+
+function filterExcludedIds<T extends { id: string }>(
+  entities: T[] | undefined,
+  excludedIds: Set<string>,
+): T[] | undefined {
+  if (!entities || entities.length === 0) return entities;
+  const filtered = entities.filter((entity) => !excludedIds.has(entity.id));
+  return filtered.length > 0 ? filtered : undefined;
+}
+
+/**
+ * Drop entities that were just upserted from this same request so the client
+ * does not re-apply its own push as a remote change (A7 echo fix).
+ */
+function excludeIncomingEcho(
+  outgoing: SyncChanges,
+  incomingIds: IncomingEntityIds,
+): SyncChanges {
+  const next: SyncChanges = {
+    accounts: filterExcludedIds(outgoing.accounts, incomingIds.accountIds),
+    categories: filterExcludedIds(outgoing.categories, incomingIds.categoryIds),
+    incomeSources: filterExcludedIds(
+      outgoing.incomeSources,
+      incomingIds.incomeSourceIds,
+    ),
+    budgets: filterExcludedIds(outgoing.budgets, incomingIds.budgetIds),
+    userRules: filterExcludedIds(outgoing.userRules, incomingIds.userRuleIds),
+    transactions: filterExcludedIds(
+      outgoing.transactions,
+      incomingIds.transactionIds,
+    ),
+  };
+
+  if (
+    outgoing.profile &&
+    !(
+      incomingIds.profileId != null &&
+      outgoing.profile.id === incomingIds.profileId
+    )
+  ) {
+    next.profile = outgoing.profile;
+  }
+
+  return next;
+}
+
 export async function runSync(
   db: AppDatabase,
   userId: string,
   body: SyncRequestBody,
 ): Promise<SyncResponseBody> {
-  const now = new Date();
-  await applyIncomingChanges(db, userId, body.changes ?? {}, now);
-  const changes = await collectOutgoingChanges(db, userId, body.lastSyncedAt);
+  // Capture before apply so serverTime reflects request start (not post-write).
+  const requestStartedAt = new Date();
+  const incoming = body.changes ?? {};
+  const incomingIds = collectIncomingEntityIds(incoming);
+
+  await applyIncomingChanges(db, userId, incoming, requestStartedAt);
+
+  // Collect with the client's since-cursor, then strip ids just written in this
+  // request so we do not echo the client's own push back as remote changes.
+  const outgoing = await collectOutgoingChanges(
+    db,
+    userId,
+    body.lastSyncedAt,
+  );
+  const changes = excludeIncomingEcho(outgoing, incomingIds);
+
   return {
-    serverTime: now.toISOString(),
+    serverTime: requestStartedAt.toISOString(),
     changes,
   };
 }

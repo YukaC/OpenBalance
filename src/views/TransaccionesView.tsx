@@ -84,6 +84,7 @@ export default function TransaccionesView() {
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [motivoFilter, setMotivoFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState<"all" | PaymentMethod>(
@@ -159,9 +160,17 @@ export default function TransaccionesView() {
     setMotivoFilter("all");
     setMethodFilter("all");
     setSearchQuery("");
+    setDebouncedSearchQuery("");
     setTypeFilter("all");
     setIsFilterPanelOpen(false);
   }, [selectedMonth]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 180);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const monthTransactions = useMemo(
     () =>
@@ -176,7 +185,7 @@ export default function TransaccionesView() {
   );
 
   const filtered = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const normalizedQuery = debouncedSearchQuery.trim().toLowerCase();
     const fromDate = dateFrom || monthBounds.start;
     const toDate = dateTo || monthBounds.end;
 
@@ -226,7 +235,7 @@ export default function TransaccionesView() {
   }, [
     monthTransactions,
     typeFilter,
-    searchQuery,
+    debouncedSearchQuery,
     categoryFilter,
     motivoFilter,
     methodFilter,
@@ -249,7 +258,7 @@ export default function TransaccionesView() {
   }, [
     selectedMonth,
     typeFilter,
-    searchQuery,
+    debouncedSearchQuery,
     categoryFilter,
     motivoFilter,
     methodFilter,

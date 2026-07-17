@@ -20,6 +20,14 @@ const categories: Category[] = [
     kind: "variable",
     keywords: ["uber", "taxi"],
   },
+  {
+    id: "cat-club",
+    name: "Superclub",
+    icon: "⭐",
+    color: "#4a6a9a",
+    kind: "variable",
+    keywords: ["superclub"],
+  },
 ];
 
 describe("suggestCategoryId", () => {
@@ -40,6 +48,31 @@ describe("suggestCategoryId", () => {
       { id: "r1", pattern: "almuerzo", categoryId: "cat-food" },
     ];
     const result = suggestCategoryId("almuerzo laburo", categories, rules);
+    assert.equal(result.categoryId, "cat-food");
+    assert.equal(result.isAuto, true);
+  });
+
+  it("picks the longest matching category keyword", () => {
+    const result = suggestCategoryId("compra en superclub", categories, []);
+    assert.equal(result.categoryId, "cat-club");
+    assert.equal(result.isAuto, true);
+  });
+
+  it("picks the longest matching user rule pattern", () => {
+    const rules: UserCategoryRule[] = [
+      { id: "r-short", pattern: "super", categoryId: "cat-food" },
+      { id: "r-long", pattern: "superclub", categoryId: "cat-club" },
+    ];
+    const result = suggestCategoryId("pago superclub", categories, rules);
+    assert.equal(result.categoryId, "cat-club");
+    assert.equal(result.isAuto, true);
+  });
+
+  it("still prefers any user rule over a longer category keyword", () => {
+    const rules: UserCategoryRule[] = [
+      { id: "r1", pattern: "super", categoryId: "cat-food" },
+    ];
+    const result = suggestCategoryId("pago superclub", categories, rules);
     assert.equal(result.categoryId, "cat-food");
     assert.equal(result.isAuto, true);
   });

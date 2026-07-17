@@ -1,4 +1,10 @@
-import { getDay, parseISO, subMonths, subWeeks } from "date-fns";
+import {
+  differenceInCalendarDays,
+  getDay,
+  parseISO,
+  subMonths,
+  subWeeks,
+} from "date-fns";
 import type { Category, Transaction } from "./types";
 
 const DEFAULT_AMOUNT_TOLERANCE = 0.2;
@@ -6,6 +12,9 @@ const DEFAULT_RECENT_MONTHS = 4;
 const DEFAULT_RECENT_WEEKS = 8;
 const MIN_MONTHLY_MATCHES = 2;
 const MIN_WEEKLY_MATCHES = 3;
+const MIN_BIWEEKLY_MATCHES = 3;
+const BIWEEKLY_GAP_MIN_DAYS = 11;
+const BIWEEKLY_GAP_MAX_DAYS = 17;
 
 const WEEKDAY_LABELS = [
   "domingo",
@@ -17,7 +26,7 @@ const WEEKDAY_LABELS = [
   "sábado",
 ] as const;
 
-export type RecurringExpenseCadence = "monthly" | "weekly";
+export type RecurringExpenseCadence = "monthly" | "weekly" | "biweekly";
 
 export interface RecurringExpenseSuggestion {
   key: string;
@@ -81,9 +90,39 @@ function displayTitle(pattern: string, categoryName: string | null): string {
   return categoryName ?? "Gasto";
 }
 
+function medianGapDays(dates: string[]): number | null {
+  if (dates.length < 2) return null;
+  const sorted = [...dates].sort((a, b) => a.localeCompare(b));
+  const gaps: number[] = [];
+  for (let index = 1; index < sorted.length; index += 1) {
+    gaps.push(
+      differenceInCalendarDays(
+        parseISO(sorted[index]),
+        parseISO(sorted[index - 1]),
+      ),
+    );
+  }
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  if (gaps.length % 2 === 0) {
+    return (gaps[mid - 1] + gaps[mid]) / 2;
+  }
+  return gaps[mid];
+}
+
+function isBiweeklySpacing(dates: string[]): boolean {
+  if (dates.length < MIN_BIWEEKLY_MATCHES) return false;
+  const median = medianGapDays(dates);
+  return (
+    median != null &&
+    median >= BIWEEKLY_GAP_MIN_DAYS &&
+    median <= BIWEEKLY_GAP_MAX_DAYS
+  );
+}
+
 /**
- * Scan gastos for patterns that look monthly (same category/title across months)
- * or weekly (same weekday, similar amount). Skips already-fixed matches.
+ * Scan gastos for patterns that look monthly, biweekly (~14d), or weekly.
+ * Skips already-fixed matches.
  */
 export function findRecurringExpenseSuggestions(
   transactions: Transaction[],
@@ -108,7 +147,7 @@ export function findRecurringExpenseSuggestions(
   const suggestions: RecurringExpenseSuggestion[] = [];
   const seenKeys = new Set<string>();
 
-  // Monthly: same category (or title pattern) across ≥2 distinct months, similar amounts.
+  // Monthly / biweekly: same category (or title pattern) across ≥2 distinct months.
   const byGroup = new Map<string, Transaction[]>();
   for (const item of expenses) {
     if (!isWithinRecentMonths(item.date, referenceDate, recentMonths)) continue;
@@ -140,13 +179,17 @@ export function findRecurringExpenseSuggestions(
         ? (categoryById.get(reference.categoryId) ?? null)
         : null;
       const titlePattern = normalizeTitle(reference.title);
+      const isBiweekly = isBiweeklySpacing(similar.map((item) => item.date));
+      const cadence: RecurringExpenseCadence = isBiweekly
+        ? "biweekly"
+        : "monthly";
       const candidate: RecurringExpenseSuggestion = {
-        key: `monthly:${groupKey}`,
+        key: `${cadence}:${groupKey}`,
         categoryId: category?.id ?? null,
         categoryName: category?.name ?? null,
         categoryIcon: category?.icon ?? null,
         titlePattern: displayTitle(titlePattern, category?.name ?? null),
-        cadence: "monthly",
+        cadence,
         matchCount: similar.length,
         weekday: null,
         weekdayLabel: null,
@@ -166,8 +209,12 @@ export function findRecurringExpenseSuggestions(
       const category = categoryId ? categoryById.get(categoryId) : null;
       if (category?.kind === "fijo" && months.size >= MIN_MONTHLY_MATCHES) {
         const reference = group[0];
+        const isBiweekly = isBiweeklySpacing(group.map((item) => item.date));
+        const cadence: RecurringExpenseCadence = isBiweekly
+          ? "biweekly"
+          : "monthly";
         best = {
-          key: `monthly:${groupKey}`,
+          key: `${cadence}:${groupKey}`,
           categoryId: category.id,
           categoryName: category.name,
           categoryIcon: category.icon,
@@ -175,7 +222,7 @@ export function findRecurringExpenseSuggestions(
             normalizeTitle(reference.title),
             category.name,
           ),
-          cadence: "monthly",
+          cadence,
           matchCount: group.length,
           weekday: null,
           weekdayLabel: null,
@@ -185,13 +232,15 @@ export function findRecurringExpenseSuggestions(
       }
     }
 
-    if (best && !seenKeys.has(best.key)) {
+    if (best && !seenKeys.has(best.key) && !seenKeys.has(`monthly:${groupKey}`) && !seenKeys.has(`biweekly:${groupKey}`)) {
       seenKeys.add(best.key);
+      seenKeys.add(`monthly:${groupKey}`);
+      seenKeys.add(`biweekly:${groupKey}`);
       suggestions.push(best);
     }
   }
 
-  // Weekly: same title or category, same weekday, ≥3 similar loads.
+  // Weekly / biweekly-by-weekday: same title or category, same weekday.
   const weeklyGroups = new Map<string, Transaction[]>();
   for (const item of expenses) {
     if (!isWithinRecentWeeks(item.date, referenceDate, recentWeeks)) continue;
@@ -208,7 +257,9 @@ export function findRecurringExpenseSuggestions(
   }
 
   for (const [groupKey, group] of weeklyGroups) {
-    if (seenKeys.has(`monthly:${groupKey}`)) continue;
+    if (seenKeys.has(`monthly:${groupKey}`) || seenKeys.has(`biweekly:${groupKey}`)) {
+      continue;
+    }
 
     let best: RecurringExpenseSuggestion | null = null;
     for (const reference of group) {
@@ -226,18 +277,24 @@ export function findRecurringExpenseSuggestions(
       }
 
       for (const [weekday, bucket] of byWeekday) {
-        if (bucket.length < MIN_WEEKLY_MATCHES) continue;
+        const isBiweekly = isBiweeklySpacing(bucket.map((item) => item.date));
+        const minMatches = isBiweekly ? MIN_BIWEEKLY_MATCHES : MIN_WEEKLY_MATCHES;
+        if (bucket.length < minMatches) continue;
+
         const category = reference.categoryId
           ? (categoryById.get(reference.categoryId) ?? null)
           : null;
         const titlePattern = normalizeTitle(reference.title);
+        const cadence: RecurringExpenseCadence = isBiweekly
+          ? "biweekly"
+          : "weekly";
         const candidate: RecurringExpenseSuggestion = {
-          key: `weekly:${groupKey}:${weekday}`,
+          key: `${cadence}:${groupKey}:${weekday}`,
           categoryId: category?.id ?? null,
           categoryName: category?.name ?? null,
           categoryIcon: category?.icon ?? null,
           titlePattern: displayTitle(titlePattern, category?.name ?? null),
-          cadence: "weekly",
+          cadence,
           matchCount: bucket.length,
           weekday,
           weekdayLabel: WEEKDAY_LABELS[weekday] ?? "día",

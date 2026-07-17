@@ -7,6 +7,12 @@ import {
   isValidEmail,
   isValidPassword,
 } from "@/lib/auth-password";
+import {
+  consumeRateLimit,
+  getClientIp,
+  RATE_LIMIT_WINDOW_MS,
+  REGISTER_RATE_LIMIT,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -34,6 +40,26 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Database unavailable", code: "DATABASE_UNAVAILABLE" },
       { status: 503 },
+    );
+  }
+
+  const ip = getClientIp(request);
+  const rateLimit = consumeRateLimit(
+    `register:${ip}`,
+    REGISTER_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_MS,
+  );
+  if (!rateLimit.isAllowed) {
+    return NextResponse.json(
+      {
+        error: "Too many requests",
+        code: "RATE_LIMITED",
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+      },
     );
   }
 
@@ -69,10 +95,14 @@ export async function POST(request: Request) {
     .where(eq(users.email, email))
     .limit(1);
 
+  // Anti-enumeration: do not reveal that the email is already registered.
   if (existing) {
     return NextResponse.json(
-      { error: "Email already registered" },
-      { status: 409 },
+      {
+        ok: true,
+        message: "If the email is valid, the account was created.",
+      },
+      { status: 200 },
     );
   }
 

@@ -13,6 +13,7 @@ const LOGIN_RETRY_DELAYS_MS = [0, 1500, 4000] as const;
 let idleTimerId: ReturnType<typeof setTimeout> | null = null;
 let storeUnsubscribe: (() => void) | null = null;
 let pageLeaveBound = false;
+let onlineBound = false;
 let activeSessionKey: string | null = null;
 let isSyncInFlight = false;
 let loginSyncGeneration = 0;
@@ -59,6 +60,7 @@ function scheduleIdleSync() {
 /**
  * Flush pending local edits when the user leaves / backgrounds the app.
  * No-op when clean — minimizes server hits on tab switches with no edits.
+ * Keepalive is requested here; pushPullSync drops it if the body is too large (O4).
  */
 function flushPendingOnLeave() {
   if (!isAuthEnabled()) return;
@@ -77,6 +79,13 @@ function onVisibilityChange() {
   if (document.visibilityState === "hidden") {
     flushPendingOnLeave();
   }
+}
+
+/** Retry pending uploads as soon as the network comes back (A6). */
+function onOnline() {
+  if (!isAuthEnabled()) return;
+  if (activeSessionKey == null) return;
+  void runSyncSafely({ onlyIfDirty: true });
 }
 
 function onStoreChanged(
@@ -113,6 +122,18 @@ function unbindPageLeaveListeners() {
   pageLeaveBound = false;
 }
 
+function bindOnlineListener() {
+  if (onlineBound || typeof window === "undefined") return;
+  window.addEventListener("online", onOnline);
+  onlineBound = true;
+}
+
+function unbindOnlineListener() {
+  if (!onlineBound || typeof window === "undefined") return;
+  window.removeEventListener("online", onOnline);
+  onlineBound = false;
+}
+
 async function syncOnLoginWithRetry(sessionKey: string) {
   const generation = ++loginSyncGeneration;
   for (const delayMs of LOGIN_RETRY_DELAYS_MS) {
@@ -134,6 +155,7 @@ async function syncOnLoginWithRetry(sessionKey: string) {
  * - push/pull immediately on login (with short retries)
  * - push after IDLE_SYNC_MS quiet time only if dirty
  * - push on tab hide / page leave only if dirty (keepalive)
+ * - push when the browser comes back online if dirty
  */
 export function startAutoSync(sessionKey: string) {
   if (!isAuthEnabled()) {
@@ -153,6 +175,7 @@ export function startAutoSync(sessionKey: string) {
     storeUnsubscribe = useFinanceStore.subscribe(onStoreChanged);
   }
   bindPageLeaveListeners();
+  bindOnlineListener();
 
   void syncOnLoginWithRetry(sessionKey);
 }
@@ -162,6 +185,7 @@ export function stopAutoSync() {
   activeSessionKey = null;
   clearIdleTimer();
   unbindPageLeaveListeners();
+  unbindOnlineListener();
   if (storeUnsubscribe) {
     storeUnsubscribe();
     storeUnsubscribe = null;

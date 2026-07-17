@@ -13,8 +13,15 @@ import {
   toWeekIso,
   todayIso,
 } from "@/lib/dates";
+import {
+  consumeWasLastGetLockedCiphertext,
+  createEncryptedPersistStorage,
+  FINANCE_STORAGE_NAME,
+} from "@/lib/encrypted-storage";
 import { ensureLifecycle, isActive, touch } from "@/lib/entity-lifecycle";
 import { roundAmountForCurrency } from "@/lib/format";
+import { isPinEnabled } from "@/lib/pin-lock";
+import { markTransactionsRepairedThisSession } from "@/lib/repair-session";
 import {
   DEFAULT_ACCOUNTS,
   DEFAULT_CATEGORIES,
@@ -79,6 +86,14 @@ interface NewTransactionInput {
   origin?: LoadOrigin;
 }
 
+interface TransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date?: string;
+  note?: string;
+}
+
 function buildInstallmentAmounts(
   totalAmount: number,
   count: number,
@@ -133,6 +148,8 @@ interface FinanceState {
   openFormForEdit: (transactionId: string) => void;
   closeForm: () => void;
   addTransaction: (input: NewTransactionInput) => void;
+  /** Linked gasto+ingreso pair between two accounts (excluded from month totals). */
+  addTransfer: (input: TransferInput) => void;
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
   deleteTransaction: (
     id: string,
@@ -250,6 +267,54 @@ function migrateEntitiesForSync<T extends { updatedAt?: string; deletedAt?: stri
 ): T[] {
   return entities.map((entity) => ensureLifecycle(entity, nowIso));
 }
+
+const FINANCE_PERSIST_V2_KEY = "rinde-finance-v2";
+const FINANCE_PERSIST_V3_KEY = "rinde-finance-v3";
+
+/** True when v3 persist payload is missing or has no meaningful ledger/profile. */
+function isEmptyFinancePersistPayload(raw: string | null): boolean {
+  if (!raw) return true;
+  try {
+    const parsed = JSON.parse(raw) as {
+      state?: {
+        transactions?: unknown[];
+        profile?: { name?: string; isSetupComplete?: boolean };
+      };
+    };
+    const state = parsed.state;
+    if (!state) return true;
+    if (Array.isArray(state.transactions) && state.transactions.length > 0) {
+      return false;
+    }
+    if (state.profile?.isSetupComplete) return false;
+    if (typeof state.profile?.name === "string" && state.profile.name.trim()) {
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * A4: copy legacy `rinde-finance-v2` into v3 when v3 is absent/empty.
+ * Must run before zustand persist reads storage. Lifecycle fields are filled
+ * later in onRehydrateStorage via ensureLifecycle / migrateEntitiesForSync.
+ */
+function migrateFinancePersistV2ToV3IfNeeded(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const v2Raw = localStorage.getItem(FINANCE_PERSIST_V2_KEY);
+    if (!v2Raw) return;
+    const v3Raw = localStorage.getItem(FINANCE_PERSIST_V3_KEY);
+    if (!isEmptyFinancePersistPayload(v3Raw)) return;
+    localStorage.setItem(FINANCE_PERSIST_V3_KEY, v2Raw);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+migrateFinancePersistV2ToV3IfNeeded();
 
 export const useFinanceStore = create<FinanceState>()(
   persist(
@@ -433,6 +498,76 @@ export const useFinanceStore = create<FinanceState>()(
           ]),
         }));
       },
+      addTransfer: (input) => {
+        const fromAccount = get().accounts.find(
+          (account) => account.id === input.fromAccountId && isActive(account),
+        );
+        const toAccount = get().accounts.find(
+          (account) => account.id === input.toAccountId && isActive(account),
+        );
+        if (!fromAccount || !toAccount) return;
+        if (fromAccount.id === toAccount.id) return;
+
+        const currency = fromAccount.currency;
+        const amount = roundAmountForCurrency(input.amount, currency);
+        if (!(amount > 0)) return;
+
+        const dateIso = input.date || todayIso();
+        const note = (input.note ?? "").trim();
+        const groupId = createId("xfer");
+        const weekIso = toWeekIso(dateIso);
+        const month = toMonthKey(dateIso);
+
+        const outflow = touch({
+          id: createId("tx"),
+          type: "gasto" as const,
+          amount,
+          currency,
+          date: dateIso,
+          method: "transferencia" as const,
+          categoryId: null,
+          incomeSourceId: null,
+          accountId: fromAccount.id,
+          note,
+          title: `Transferencia a ${toAccount.name}`,
+          weekIso,
+          month,
+          origin: "manual" as const,
+          isAutoCategorized: false,
+          isFixed: false,
+          deletedAt: null,
+          transferGroupId: groupId,
+        });
+
+        const inflow = touch({
+          id: createId("tx"),
+          type: "ingreso" as const,
+          amount,
+          currency,
+          date: dateIso,
+          method: "transferencia" as const,
+          categoryId: null,
+          incomeSourceId: null,
+          accountId: toAccount.id,
+          note,
+          title: `Transferencia desde ${fromAccount.name}`,
+          weekIso,
+          month,
+          origin: "manual" as const,
+          isAutoCategorized: false,
+          isFixed: false,
+          deletedAt: null,
+          transferGroupId: groupId,
+        });
+
+        set((state) => ({
+          transactions: dedupeTransactionsById([
+            outflow,
+            inflow,
+            ...state.transactions,
+          ]),
+        }));
+      },
       updateTransaction: (id, patch) =>
         set((state) => ({
           transactions: state.transactions.map((item) => {
@@ -459,6 +594,17 @@ export const useFinanceStore = create<FinanceState>()(
           if (!target || !isActive(target)) return state;
 
           const nowIso = new Date().toISOString();
+
+          if (target.transferGroupId) {
+            const groupId = target.transferGroupId;
+            return {
+              transactions: state.transactions.map((item) =>
+                item.transferGroupId === groupId && isActive(item)
+                  ? touch({ ...item, deletedAt: nowIso })
+                  : item,
+              ),
+            };
+          }
 
           if (options?.deleteInstallmentGroup && target.installmentGroupId) {
             const groupId = target.installmentGroupId;
@@ -750,7 +896,8 @@ export const useFinanceStore = create<FinanceState>()(
       },
     }),
     {
-      name: "rinde-finance-v3",
+      name: FINANCE_STORAGE_NAME,
+      storage: createEncryptedPersistStorage(),
       partialize: (state) => ({
         profile: state.profile,
         categories: state.categories,
@@ -764,7 +911,22 @@ export const useFinanceStore = create<FinanceState>()(
         lastSyncedAt: state.lastSyncedAt,
       }),
       onRehydrateStorage: () => (state) => {
-        if (!state) return;
+        const wasLockedCiphertext = consumeWasLastGetLockedCiphertext();
+
+        if (!state) {
+          // Allow PIN unlock UI even when ciphertext could not be decrypted yet.
+          if (wasLockedCiphertext || isPinEnabled()) {
+            useFinanceStore.setState({ hydrated: true });
+          }
+          return;
+        }
+
+        // Locked ciphertext hydrate uses blank defaults — mark ready for PIN UI,
+        // but do not repair/persist (would wipe the encrypted blob).
+        if (wasLockedCiphertext) {
+          state.setHydrated(true);
+          return;
+        }
 
         const nowIso = new Date().toISOString();
 
@@ -841,7 +1003,9 @@ export const useFinanceStore = create<FinanceState>()(
         }
 
         state.setHydrated(true);
-        // Rewrite localStorage with cleaned ledger (in-place hydrate alone may not persist).
+        // Rewrite storage with cleaned ledger (in-place hydrate alone may not persist).
+        // Flag before microtask so ResumenView mount skips a redundant repair.
+        markTransactionsRepairedThisSession();
         queueMicrotask(() => {
           useFinanceStore.getState().repairTransactions();
         });
@@ -849,3 +1013,10 @@ export const useFinanceStore = create<FinanceState>()(
     },
   ),
 );
+
+/** Nudge persist so enabling/disabling PIN rewrites ciphertext vs plaintext. */
+export function touchFinancePersist(): void {
+  useFinanceStore.setState((state) => ({
+    profile: { ...state.profile },
+  }));
+}

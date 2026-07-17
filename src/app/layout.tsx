@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, IBM_Plex_Mono, Source_Sans_3 } from "next/font/google";
 import { AppShell } from "@/components/AppShell";
 import { AuthSessionProvider } from "@/components/AuthSessionProvider";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -75,6 +76,7 @@ export default function RootLayout({
         <AuthSessionProvider>
           <AppShell>{children}</AppShell>
         </AuthSessionProvider>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
