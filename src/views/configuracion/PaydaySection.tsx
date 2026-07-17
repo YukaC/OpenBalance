@@ -55,7 +55,7 @@ export function PaydaySection({
       <CollapsibleLedgerSection
         headingId="reminders-heading"
         title="Recordatorios"
-        lede="Si abrís Rinde el día de cobro y todavía no cargaste el ingreso de la semana, te mostramos un aviso. En la app nativa también programamos una notificación local; en el navegador pedimos permiso de Web Notifications."
+        lede="Si abrís OpenBalance el día de cobro y todavía no cargaste el ingreso de la semana, te mostramos un aviso. En la app nativa también programamos una notificación local; en el navegador pedimos permiso de Web Notifications."
       >
         <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--bg)] px-3.5 py-3">
           <input

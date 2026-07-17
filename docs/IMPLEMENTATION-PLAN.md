@@ -1,7 +1,7 @@
-# Plan de implementación — Rinde / OpenBalance
+# Plan de implementación — OpenBalance
 
 Fecha: 2026-07-16 (actualizado con análisis de producto + épicas de seguridad/offline; ampliado con hallazgos de 8 subagentes de exploración paralela — sección 8)  
-Repo: `YukaC/OpenBalance` · App: **Rinde**
+Repo: `YukaC/OpenBalance` · App: **OpenBalance**
 
 Principios: **DRY**, **KISS**, sin dependencias nuevas sin preguntar, lógica de cálculo siempre en cliente, backend tonto (CRUD/sync).
 
@@ -9,7 +9,7 @@ Principios: **DRY**, **KISS**, sin dependencias nuevas sin preguntar, lógica de
 
 ## 1. Qué es el proyecto
 
-Rinde es una app de finanzas personales para quien **cobra por semana** y **decide por mes** (freelancers, changas, trabajo informal). El nicho es claro: la mayoría de apps asumen sueldo mensual fijo; acá la unidad natural es la **semana de cobro** y el mes es el marco de resumen.
+OpenBalance es una app de finanzas personales para quien **cobra por semana** y **decide por mes** (freelancers, changas, trabajo informal). El nicho es claro: la mayoría de apps asumen sueldo mensual fijo; acá la unidad natural es la **semana de cobro** y el mes es el marco de resumen.
 
 ### Stack real (evolucionó del plan original)
 
@@ -45,7 +45,7 @@ Typecheck / lint / tests de dominio en verde.
 
 ## 2. Objetivo de este plan
 
-Llevar Rinde de “MVP con cuenta y sync básico” a un producto **seguro en el dispositivo**, **usable offline**, con **Android instalable**, sync predecible y finanzas (saldos/transferencias) — sin sobre-ingeniería (&lt; 10 usuarios).
+Llevar OpenBalance de “MVP con cuenta y sync básico” a un producto **seguro en el dispositivo**, **usable offline**, con **Android instalable**, sync predecible y finanzas (saldos/transferencias) — sin sobre-ingeniería (&lt; 10 usuarios).
 
 ---
 
@@ -103,7 +103,7 @@ flowchart TD
 - **Done when:** dos pestañas, gana el más nuevo + aviso.
 
 ### A4. Migración persist `v2 → v3`
-- Copiar `rinde-finance-v2` → v3 + `ensureLifecycle`.
+- Copiar legacy `rinde-finance-v2` → `openbalance-finance-v3` + `ensureLifecycle` (migración de prefijo `rinde-*` → `openbalance-*`).
 - **Done when:** usuario legacy no pierde datos.
 
 ### A5. Fix clock-skew en `isChangedSince` (🔴 riesgo de pérdida silenciosa de datos)
@@ -192,7 +192,7 @@ PR: `chore/backend-hardening` (agrupar H1, H5, H6, H7, H8 — bajo esfuerzo) + `
 ### S2. Mover blob cifrado a IndexedDB
 - Más espacio y mejor para binarios que `localStorage`.
 - Zustand persist custom storage adapter (async).
-- Mantener key versionada (`rinde-finance-v4` o namespace IDB).
+- Mantener key versionada (`openbalance-finance-v4` o namespace IDB; legacy `rinde-*` se migra).
 
 ### S3. UX de desbloqueo
 - `PinUnlockScreen` ya existe: debe **desbloquear la clave de cifrado**, no solo ocultar UI.
@@ -576,7 +576,7 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 | A1 Sync chip | DONE | `SyncStatusChip` + `sync-status.ts` |
 | A2 Flush leave | DONE | `keepalive` dirty-only; smoke en `docs/DEPLOY.md` |
 | A3 LWW toast | DONE | Toast en `applyRemoteSyncChanges` |
-| A4 Migrate v2→v3 | DONE | `finance-store` copia `rinde-finance-v2` |
+| A4 Migrate v2→v3 | DONE | `finance-store` copia legacy `rinde-finance-v2` → `openbalance-*` |
 | A5 Clock-skew | PARTIAL | Skew + tolerancia en `isChangedSince`; falta test “reloj atrasado” explícito |
 | A6 Online retry | DONE | Listener `online` + backoff en `auto-sync.ts` |
 | A7 Echo pull | DONE | `excludeIncomingEcho` en `sync-server.ts` |

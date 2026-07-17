@@ -1,4 +1,4 @@
-# Rinde — Capacitor mobile
+# OpenBalance — Capacitor mobile
 
 Empaquetar la web estática en Android/iOS con Capacitor. El backend (auth/sync) sigue en Vercel.
 
@@ -67,7 +67,7 @@ En Capacitor el WebView tiene origen distinto al API de Vercel (`https://localho
 ### Qué hacer en Vercel (si probás cookies)
 
 - `AUTH_URL=https://tu-app.vercel.app` (origen canónico del sitio, no el WebView).
-- Cookies de sesión con `Secure` + `SameSite=None` si alguna vez querés cookie cross-site (Auth.js / trustHost). En la práctica el path KISS de Rinde **no depende** de eso en native.
+- Cookies de sesión con `Secure` + `SameSite=None` si alguna vez querés cookie cross-site (Auth.js / trustHost). En la práctica el path KISS de OpenBalance **no depende** de eso en native.
 
 ### Path KISS que usa la app nativa
 
@@ -110,7 +110,7 @@ Todos los imports van detrás de `isRunningInNativeApp()` + dynamic `import()` p
 | **K3 Splash / icons** | Splash configurado en `capacitor.config.ts`. PNGs 192/512 (+ apple-touch 180) en `public/icons/`. |
 | **K4 Haptics** | Impacto liviano al abrir FAB; success al guardar movimiento. |
 | **K5 Safe-area** | CSS `--safe-top/bottom/left/right`; `--page-pad-x` usa left/right para landscape. |
-| **K6 Deep links** | Stub: `App.getLaunchUrl` + `appUrlOpen` + tap de notificación → `rinde://income` abre form de ingreso. Intent filters nativos al versionar `/android` `/ios`. |
+| **K6 Deep links** | Stub: `App.getLaunchUrl` + `appUrlOpen` + tap de notificación → `openbalance://income` (legacy `rinde://`) abre form de ingreso. Intent filters nativos al versionar `/android` `/ios`. |
 | **E3 Payday** | `syncNativePaydayNotification` agenda aviso semanal 09:00 el día de cobro. Tap → deep link ingreso. |
 | **S4 Biometría** | Con PIN activo, toggle en Configuración. Guarda PIN local tras autenticar; el cifrado sigue siendo la clave derivada del PIN. |
 

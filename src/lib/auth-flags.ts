@@ -1,5 +1,5 @@
 /**
- * Cloud auth gate for Rinde.
+ * Cloud auth gate for OpenBalance.
  *
  * Local-first default: auth is OFF unless explicitly enabled.
  * Set `NEXT_PUBLIC_AUTH_ENABLED=true` only when Auth.js + DB are configured

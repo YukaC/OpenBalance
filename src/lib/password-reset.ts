@@ -40,7 +40,7 @@ export async function trySendResetEmail(
   }
 
   const fromAddress =
-    process.env.RESEND_FROM?.trim() || "Rinde <onboarding@resend.dev>";
+    process.env.RESEND_FROM?.trim() || "OpenBalance <onboarding@resend.dev>";
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
@@ -52,15 +52,20 @@ export async function trySendResetEmail(
       body: JSON.stringify({
         from: fromAddress,
         to: [toEmail],
-        subject: "Restablecer contraseña — Rinde",
+        subject: "Restablecer contraseña — OpenBalance",
         text: [
-          "Recibimos un pedido para restablecer tu contraseña en Rinde.",
+          "Recibimos un pedido para restablecer tu contraseña en OpenBalance.",
           "",
           "Abrí este enlace (válido 1 hora):",
           resetUrl,
           "",
           "Si no pediste esto, ignorá el mensaje.",
         ].join("\n"),
+        html: [
+          "<p>Recibimos un pedido para restablecer tu contraseña en <strong>OpenBalance</strong>.</p>",
+          `<p><a href="${resetUrl}">Restablecer contraseña</a> (válido 1 hora)</p>`,
+          "<p>Si no pediste esto, ignorá el mensaje.</p>",
+        ].join(""),
       }),
     });
     return response.ok;

@@ -9,10 +9,11 @@
 import { getApiBaseUrl } from "@/lib/auth-flags";
 import { isRunningInNativeApp } from "@/lib/device";
 
-export const NATIVE_AUTH_TOKEN_KEY = "rinde-native-auth-token";
-export const NATIVE_AUTH_CHANGED_EVENT = "rinde-native-auth-changed";
+export const NATIVE_AUTH_TOKEN_KEY = "openbalance-native-auth-token";
+export const NATIVE_AUTH_CHANGED_EVENT = "openbalance-native-auth-changed";
 
-const LOCAL_FALLBACK_KEY = NATIVE_AUTH_TOKEN_KEY;
+/** LEGACY: pre-rename Preferences / localStorage key (Rinde → OpenBalance). */
+const LEGACY_NATIVE_AUTH_TOKEN_KEY = "rinde-native-auth-token";
 
 async function readPreferencesValue(key: string): Promise<string | null> {
   try {
@@ -38,6 +39,30 @@ async function removePreferencesValue(key: string): Promise<void> {
   }
 }
 
+function readLocalStorageValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorageValue(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+function removeLocalStorageValue(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
 function notifyNativeAuthChanged(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(NATIVE_AUTH_CHANGED_EVENT));
@@ -47,15 +72,16 @@ export async function getNativeAuthToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
   if (isRunningInNativeApp()) {
-    const fromPreferences = await readPreferencesValue(NATIVE_AUTH_TOKEN_KEY);
+    const fromPreferences =
+      (await readPreferencesValue(NATIVE_AUTH_TOKEN_KEY)) ??
+      (await readPreferencesValue(LEGACY_NATIVE_AUTH_TOKEN_KEY));
     if (fromPreferences) return fromPreferences;
   }
 
-  try {
-    return window.localStorage.getItem(LOCAL_FALLBACK_KEY);
-  } catch {
-    return null;
-  }
+  return (
+    readLocalStorageValue(NATIVE_AUTH_TOKEN_KEY) ??
+    readLocalStorageValue(LEGACY_NATIVE_AUTH_TOKEN_KEY)
+  );
 }
 
 export async function setNativeAuthToken(token: string): Promise<void> {
@@ -64,16 +90,14 @@ export async function setNativeAuthToken(token: string): Promise<void> {
   if (isRunningInNativeApp()) {
     try {
       await writePreferencesValue(NATIVE_AUTH_TOKEN_KEY, token);
+      await removePreferencesValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
     } catch {
       // Fall through to localStorage if Preferences fails.
     }
   }
 
-  try {
-    window.localStorage.setItem(LOCAL_FALLBACK_KEY, token);
-  } catch {
-    /* ignore */
-  }
+  writeLocalStorageValue(NATIVE_AUTH_TOKEN_KEY, token);
+  removeLocalStorageValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
 
   notifyNativeAuthChanged();
 }
@@ -83,13 +107,11 @@ export async function clearNativeAuthToken(): Promise<void> {
 
   if (isRunningInNativeApp()) {
     await removePreferencesValue(NATIVE_AUTH_TOKEN_KEY);
+    await removePreferencesValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
   }
 
-  try {
-    window.localStorage.removeItem(LOCAL_FALLBACK_KEY);
-  } catch {
-    /* ignore */
-  }
+  removeLocalStorageValue(NATIVE_AUTH_TOKEN_KEY);
+  removeLocalStorageValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
 
   notifyNativeAuthChanged();
 }

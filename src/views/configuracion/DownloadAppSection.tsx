@@ -24,7 +24,7 @@ export function DownloadAppSection() {
     <CollapsibleLedgerSection
       headingId="download-app-heading"
       title="Descargá la app"
-      lede="Usá Rinde en tu teléfono con la app nativa. Más rápida y lista para el día a día."
+      lede="Usá OpenBalance en tu teléfono con la app nativa. Más rápida y lista para el día a día."
       defaultOpen
     >
       <div className="flex flex-col gap-2 sm:flex-row">

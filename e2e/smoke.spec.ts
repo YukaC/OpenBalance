@@ -5,7 +5,7 @@ test.describe("smoke", () => {
     await page.goto("/");
 
     // Brand appears on shell, auth gate, and onboarding.
-    await expect(page.getByText("Rinde").first()).toBeVisible({
+    await expect(page.getByText("OpenBalance").first()).toBeVisible({
       timeout: 30_000,
     });
 

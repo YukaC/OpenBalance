@@ -67,7 +67,7 @@ export function OnboardingScreen() {
       >
         <header className="space-y-2 text-center">
           <p className="font-display text-[28px] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-            Rinde
+            OpenBalance
           </p>
           <h1
             id="onboarding-heading"

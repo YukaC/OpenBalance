@@ -59,9 +59,13 @@ export function shouldShowPaydayLoadReminder(
   return !hasIncomeThisWeek;
 }
 
-export const PAYDAY_NOTIFICATION_TITLE = "Rinde · Día de cobro";
+export const PAYDAY_NOTIFICATION_TITLE = "OpenBalance · Día de cobro";
 export const PAYDAY_NOTIFICATION_BODY =
   "Todavía no cargaste el ingreso de esta semana.";
+
+const PAYDAY_NOTIFY_STORAGE_KEY = "openbalance-payday-notify";
+/** LEGACY: pre-rename localStorage key (Rinde → OpenBalance). */
+const LEGACY_PAYDAY_NOTIFY_STORAGE_KEY = "rinde-payday-notify";
 
 /**
  * Fire a one-shot Web Notification if permission is already granted.
@@ -76,13 +80,20 @@ export function maybeNotifyPaydayLoad(options?: {
   }
   if (Notification.permission !== "granted") return false;
 
-  const storageKey = options?.storageKey ?? "rinde-payday-notify";
+  const storageKey = options?.storageKey ?? PAYDAY_NOTIFY_STORAGE_KEY;
   const dayKey =
     options?.dayKey ?? new Date().toISOString().slice(0, 10);
   try {
-    const lastNotified = window.localStorage.getItem(storageKey);
+    const lastNotified =
+      window.localStorage.getItem(storageKey) ??
+      (storageKey === PAYDAY_NOTIFY_STORAGE_KEY
+        ? window.localStorage.getItem(LEGACY_PAYDAY_NOTIFY_STORAGE_KEY)
+        : null);
     if (lastNotified === dayKey) return false;
     window.localStorage.setItem(storageKey, dayKey);
+    if (storageKey === PAYDAY_NOTIFY_STORAGE_KEY) {
+      window.localStorage.removeItem(LEGACY_PAYDAY_NOTIFY_STORAGE_KEY);
+    }
   } catch {
     // localStorage may be unavailable; still try to notify once per session.
   }
@@ -90,7 +101,7 @@ export function maybeNotifyPaydayLoad(options?: {
   try {
     new Notification(PAYDAY_NOTIFICATION_TITLE, {
       body: PAYDAY_NOTIFICATION_BODY,
-      tag: `rinde-payday-${dayKey}`,
+      tag: `openbalance-payday-${dayKey}`,
     });
     return true;
   } catch {
@@ -159,7 +170,7 @@ export async function syncNativePaydayNotification(
             allowWhileIdle: true,
           },
           extra: {
-            deepLink: "rinde://income",
+            deepLink: "openbalance://income",
             openIncome: true,
           },
         },

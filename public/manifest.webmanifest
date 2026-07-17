@@ -1,7 +1,7 @@
 {
-  "name": "Rinde",
-  "short_name": "Rinde",
-  "description": "Finanzas personales — resumen semanal y mensual",
+  "name": "OpenBalance",
+  "short_name": "OpenBalance",
+  "description": "OpenBalance — finanzas personales, resumen semanal y mensual",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#e6e2db",

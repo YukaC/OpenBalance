@@ -38,7 +38,24 @@ function SectionLoading() {
   return <ViewSkeleton />;
 }
 
-const CHUNK_RELOAD_KEY = "rinde-chunk-reload";
+const CHUNK_RELOAD_KEY = "openbalance-chunk-reload";
+/** LEGACY: pre-rename sessionStorage flag — migrated on read. */
+const LEGACY_CHUNK_RELOAD_KEY = "rinde-chunk-reload";
+
+function readChunkReloadFlag(): boolean {
+  if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return true;
+  if (sessionStorage.getItem(LEGACY_CHUNK_RELOAD_KEY)) {
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+    sessionStorage.removeItem(LEGACY_CHUNK_RELOAD_KEY);
+    return true;
+  }
+  return false;
+}
+
+function clearChunkReloadFlag(): void {
+  sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+  sessionStorage.removeItem(LEGACY_CHUNK_RELOAD_KEY);
+}
 
 function importWithChunkRetry<T>(
   importer: () => Promise<T>,
@@ -52,12 +69,12 @@ function importWithChunkRetry<T>(
       );
     if (isChunkError && typeof window !== "undefined") {
       try {
-        if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+        if (!readChunkReloadFlag()) {
           sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
           window.location.reload();
           return new Promise<T>(() => {});
         }
-        sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+        clearChunkReloadFlag();
       } catch {
         /* ignore storage failures */
       }
@@ -253,7 +270,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
 
   useEffect(() => {
     try {
-      sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+      clearChunkReloadFlag();
     } catch {
       /* ignore */
     }
@@ -426,7 +443,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
             <SectionNavButton
               href="/"
               className={`group flex shrink-0 items-center gap-3 rounded-xl px-2 py-1.5 transition-soft hover:bg-[var(--paper-deep)] ${FOCUS_RING}`}
-              ariaLabel="Rinde — inicio"
+              ariaLabel="OpenBalance — inicio"
               onNavigate={navigateToSection}
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[var(--ink)] shadow-[var(--shadow-nav)] transition-soft group-hover:scale-[1.03] group-active:scale-95">
@@ -444,7 +461,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
                 </svg>
               </span>
               <span className="font-display text-[22px] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-                Rinde
+                OpenBalance
               </span>
             </SectionNavButton>
 
@@ -508,7 +525,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
             <SectionNavButton
               href="/"
               className={`flex min-h-11 items-center gap-2 rounded-lg px-1 transition-soft ${FOCUS_RING}`}
-              ariaLabel="Rinde — inicio"
+              ariaLabel="OpenBalance — inicio"
               onNavigate={navigateToSection}
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--ink)]">
@@ -526,7 +543,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
                 </svg>
               </span>
               <span className="font-display text-[18px] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-                Rinde
+                OpenBalance
               </span>
             </SectionNavButton>
             <div className="flex items-center gap-2">

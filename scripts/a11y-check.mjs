@@ -24,7 +24,7 @@
  * Checklist detail: docs/A11Y.md
  */
 
-console.log(`Rinde a11y check (manual)
+console.log(`OpenBalance a11y check (manual)
 
 1. Ensure lint a11y is on:  pnpm lint
 2. Confirm axe-core resolves:  pnpm test -- src/lib/a11y-smoke.test.ts

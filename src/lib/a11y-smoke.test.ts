@@ -28,7 +28,7 @@ describe("a11y smoke (axe-core)", () => {
 
     document.body.innerHTML = `
       <main>
-        <h1>Rinde a11y fixture</h1>
+        <h1>OpenBalance a11y fixture</h1>
         <label for="amount">Monto</label>
         <input id="amount" type="text" aria-invalid="false" />
         <button type="button">Guardar</button>

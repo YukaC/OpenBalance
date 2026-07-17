@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  /* Rinde brand direction (hybrid A+B / dirección híbrida):
+  /* OpenBalance brand direction (hybrid A+B / dirección híbrida):
      Keep charcoal #1F1D20 + drier terracotta UI. Light paper = cooler grey-warm
      (not cream latte #F4F1EA). Sidebar = inkier “ledger margin”. Cards = broken white.
      Accents: --accent-ui = terracotta CTA; --accent-money / --accent = green money. */
@@ -345,7 +345,7 @@ html.dark {
   /* Deprecated: `.card-surface` removed — use `.ledger-panel` for cards.
      Inputs: prefer `rounded-[var(--radius-md)]` (=10px) over hard-coded `rounded-[10px]`. */
 
-  /* —— Rinde ledger system ——
+  /* —— OpenBalance ledger system ——
      Signature: warm paper panels with a terracotta receipt hairline.
      One visual language for Resumen + every other section. */
 

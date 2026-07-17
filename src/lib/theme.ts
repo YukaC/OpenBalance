@@ -2,12 +2,16 @@ export type ThemeMode = "light" | "dark" | "system";
 
 export type ResolvedTheme = "light" | "dark";
 
-export const THEME_STORAGE_KEY = "rinde-theme";
+export const THEME_STORAGE_KEY = "openbalance-theme";
+/** LEGACY: pre-rename theme key — migrated into THEME_STORAGE_KEY on read. */
+const LEGACY_THEME_STORAGE_KEY = "rinde-theme";
 
 export function readStoredTheme(): ThemeMode | null {
   if (typeof window === "undefined") return null;
   try {
-    const value = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const value =
+      window.localStorage.getItem(THEME_STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
     if (value === "light" || value === "dark" || value === "system") return value;
   } catch {
     /* ignore */

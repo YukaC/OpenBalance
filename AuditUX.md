@@ -1,4 +1,4 @@
-# Auditoría UX / UI — Rinde
+# Auditoría UX / UI — OpenBalance
 
 **Fecha:** 2026-07-16  
 **Rol:** Senior UX/UI  
@@ -12,7 +12,7 @@
 
 ## Veredicto
 
-**Rinde tiene un MVP visual coherente y por encima del promedio de fintech local-first:** tokens claros, lenguaje “ledger” (papel cálido + hairline terracotta), dual nav desktop/móvil, FAB, modal con trap de foco, empty states con CTA, y respeto parcial a `prefers-reduced-motion`.
+**OpenBalance tiene un MVP visual coherente y por encima del promedio de fintech local-first:** tokens claros, lenguaje “ledger” (papel cálido + hairline terracotta), dual nav desktop/móvil, FAB, modal con trap de foco, empty states con CTA, y respeto parcial a `prefers-reduced-motion`.
 
 **Pero la identidad cae en el cluster AI por defecto** (papel crema `#F3EEE6` + serif Fraunces + acento terracotta `#803E2F`). Funciona, se siente “producto”, y a la vez es intercambiable con otras demos de finanzas generadas.
 
@@ -41,13 +41,13 @@ Sube a ~8.5 si: (1) tipografía body deja Inter, (2) focus ring no se apaga en T
 
 ### Lo que se ve bien en pantalla
 
-- **Onboarding dark:** marca “Rinde” hero-level, panel ledger centrado, CTA terracotta “Continuar”, chips cobro/moneda claros. Mejor momento de brand.
+- **Onboarding dark:** marca “OpenBalance” hero-level, panel ledger centrado, CTA terracotta “Continuar”, chips cobro/moneda claros. Mejor momento de brand.
 - **Shell desktop:** sidebar + nav + ThemeToggle (“Según sistema” → “Modo claro”) + card perfil YU. Jerarquía OK.
 - **Balance hero:** kicker “TE QUEDA ESTE MES”, `$0` grande, Entró verde / Salió rojo — semántica legible.
 - **Semana Hoy:** badge “HOY” + card selected; strip de 5 semanas funciona.
 - **Empty copy:** “Sin cargar”, “Todavía no hay gastos…”, CTA “Cargar un gasto” presentes.
 - **Form modal:** labels claros, toggle Ingreso/Gasto, fecha default `2026-07-16` (= hoy real del entorno), categorías seed con emoji.
-- **Mobile:** top bar Rinde + theme + avatar; FAB `+`; dock Resumen / Semanas / Movs. / Categ. — layout PWA correcto.
+- **Mobile:** top bar OpenBalance + theme + avatar; FAB `+`; dock Resumen / Semanas / Movs. / Categ. — layout PWA correcto.
 
 ### Hallazgos live (pixel / runtime)
 
@@ -228,7 +228,7 @@ Orden actual:
 | Transacciones | Filtros chips + empty OK; delete con `confirm` nativo (fricción fea) |
 | Categorías | Densidad alta (keywords inline); color no editable; presupuestos útiles |
 | Configuración | Larga (~780 líneas UI); se siente “settings dump” — agrupar en secciones sticky / acordeón |
-| Onboarding | Brand-first (`Rinde` grande), copy local-first honesta — **mejor pantalla de marca** |
+| Onboarding | Brand-first (`OpenBalance` grande), copy local-first honesta — **mejor pantalla de marca** |
 | PIN | Simple; no cifra datos (trust copy debería ser más explícita si se vende “seguridad”) |
 
 ### Empty / loading
@@ -405,4 +405,4 @@ Orden actual:
 
 ## 12. Veredicto final (una frase)
 
-**Producto usable y con oficio de design system, pero aún “demo warm paper”: arreglá contraste + foco + densidad mobile, y dale una tipografía body propia — ahí Rinde deja de parecer template y empieza a parecer marca.**
+**Producto usable y con oficio de design system, pero aún “demo warm paper”: arreglá contraste + foco + densidad mobile, y dale una tipografía body propia — ahí OpenBalance deja de parecer template y empieza a parecer marca.**

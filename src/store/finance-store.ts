@@ -271,6 +271,7 @@ function migrateEntitiesForSync<T extends { updatedAt?: string; deletedAt?: stri
   return entities.map((entity) => ensureLifecycle(entity, nowIso));
 }
 
+/** LEGACY: Rinde persist keys — bridge into openbalance-finance-v5 via encrypted-storage. */
 const FINANCE_PERSIST_V2_KEY = "rinde-finance-v2";
 const FINANCE_PERSIST_V3_KEY = "rinde-finance-v3";
 
@@ -300,7 +301,8 @@ function isEmptyFinancePersistPayload(raw: string | null): boolean {
 }
 
 /**
- * A4: copy legacy `rinde-finance-v2` into v3 when v3 is absent/empty.
+ * A4 / LEGACY: copy `rinde-finance-v2` into `rinde-finance-v3` when v3 is
+ * absent/empty. encrypted-storage then promotes v3/v4 → `openbalance-finance-v5`.
  * Must run before zustand persist reads storage. Lifecycle fields are filled
  * later in onRehydrateStorage via ensureLifecycle / migrateEntitiesForSync.
  */

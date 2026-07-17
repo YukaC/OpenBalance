@@ -12,7 +12,7 @@
  * permissive static policy in next.config.ts (middleware nonces are SSR-only).
  *
  * Required env for a usable native app:
- *   NEXT_PUBLIC_API_BASE_URL  — production API origin (e.g. https://rinde.vercel.app)
+ *   NEXT_PUBLIC_API_BASE_URL  — production API origin (e.g. https://openbalance.vercel.app)
  *
  * Optional store links (also used by the web download banner):
  *   NEXT_PUBLIC_ANDROID_DOWNLOAD_URL
@@ -32,7 +32,7 @@ import path from "node:path";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const apiDir = path.join(rootDir, "src", "app", "api");
 const middlewareFile = path.join(rootDir, "src", "middleware.ts");
-const stashRoot = path.join(os.tmpdir(), `rinde-mobile-api-stash-${process.pid}`);
+const stashRoot = path.join(os.tmpdir(), `openbalance-mobile-api-stash-${process.pid}`);
 const stashedApiDir = path.join(stashRoot, "api");
 const stashedMiddlewareFile = path.join(stashRoot, "middleware.ts");
 

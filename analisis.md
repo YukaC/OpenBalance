@@ -1,4 +1,4 @@
-# Auditoría frontend / UX — Rinde
+# Auditoría frontend / UX — OpenBalance
 
 **Estado: CERRADA** · 2026-07-16  
 Verificación final: `typecheck` OK · `lint` OK · `test` 10/10
@@ -10,7 +10,7 @@ Fuera de alcance explícito (épicas de producto, no bugs abiertos): cifrado de 
 
 ## Resumen ejecutivo
 
-Rinde pasó de MVP con reloj demo congelado y huecos de consistencia a app usable con fecha real, totales por moneda, a11y básica, toasts con undo, config modular y tests de dominio.  
+OpenBalance pasó de MVP con reloj demo congelado y huecos de consistencia a app usable con fecha real, totales por moneda, a11y básica, toasts con undo, config modular y tests de dominio.  
 Identidad tipográfica: Fraunces (display) + Source Sans 3 (body) + IBM Plex Mono (números).
 
 ---

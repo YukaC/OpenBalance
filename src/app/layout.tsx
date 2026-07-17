@@ -33,13 +33,13 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Rinde",
-  description: "Finanzas personales — resumen semanal y mensual",
+  title: "OpenBalance",
+  description: "OpenBalance — finanzas personales, resumen semanal y mensual",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Rinde",
+    title: "OpenBalance",
   },
   icons: {
     icon: [
@@ -72,10 +72,11 @@ export default async function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        {/* Theme FOUC guard; LEGACY: also reads rinde-theme before openbalance-theme rewrite */}
         <script
           nonce={nonce}
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("rinde-theme");var dark=t==="dark"||((t==="system"||!t)&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark"}else{document.documentElement.style.colorScheme="light"}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("openbalance-theme")||localStorage.getItem("rinde-theme");var dark=t==="dark"||((t==="system"||!t)&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark"}else{document.documentElement.style.colorScheme="light"}}catch(e){}})();`,
           }}
         />
       </head>

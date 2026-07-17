@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "app.rinde.finance",
-  appName: "Rinde",
+  appId: "app.openbalance.finance",
+  appName: "OpenBalance",
   webDir: "out",
   server: {
     // Mobile app talks to the remote Vercel API via NEXT_PUBLIC_API_BASE_URL

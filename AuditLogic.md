@@ -1,4 +1,4 @@
-# Auditoría de lógica de cálculo — Rinde (AppFinanzas)
+# Auditoría de lógica de cálculo — OpenBalance (AppFinanzas)
 
 Fecha: 2026-07-16
 Alcance: toda la lógica de cálculo/agregación (`src/lib`, `src/store`) y su consumo en vistas/componentes (`src/views`, `src/components`). Se aplicó lectura completa de los módulos de negocio + `codegraph` como índice para ubicar todos los call-sites de cada función.

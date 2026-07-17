@@ -23,9 +23,18 @@ export function MonthBalance({
   );
   useEffect(() => {
     try {
-      if (!sessionStorage.getItem("rinde-hero-animated")) {
-        sessionStorage.setItem("rinde-hero-animated", "1");
+      const heroAnimatedKey = "openbalance-hero-animated";
+      // LEGACY: read old key then rewrite to openbalance-*
+      const legacyHeroAnimatedKey = "rinde-hero-animated";
+      const hasAnimated =
+        sessionStorage.getItem(heroAnimatedKey) === "1" ||
+        sessionStorage.getItem(legacyHeroAnimatedKey) === "1";
+      if (!hasAnimated) {
+        sessionStorage.setItem(heroAnimatedKey, "1");
         setHeroClass("ledger-hero");
+      } else if (!sessionStorage.getItem(heroAnimatedKey)) {
+        sessionStorage.setItem(heroAnimatedKey, "1");
+        sessionStorage.removeItem(legacyHeroAnimatedKey);
       }
     } catch {
       /* ignore */

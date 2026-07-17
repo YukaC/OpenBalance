@@ -2,11 +2,13 @@
  * Deep link stub (K6) — parse app URL / notification extras and open flows.
  *
  * Supported shapes (best-effort):
- * - rinde://income
- * - rinde://transaction/new?type=ingreso
+ * - openbalance://income (LEGACY: rinde://income still parsed)
+ * - openbalance://transaction/new?type=ingreso
  * - https://…/open/income
  * - extra.deepLink / extra.action on local notifications
  */
+
+const DEFAULT_DEEP_LINK_SCHEME = "openbalance";
 
 import { isRunningInNativeApp } from "@/lib/device";
 import type { TransactionType } from "@/lib/types";
@@ -23,7 +25,7 @@ export function parseDeepLinkUrl(rawUrl: string): DeepLinkAction | null {
   try {
     const normalized = trimmed.includes("://")
       ? trimmed
-      : `rinde://${trimmed.replace(/^\/+/, "")}`;
+      : `${DEFAULT_DEEP_LINK_SCHEME}://${trimmed.replace(/^\/+/, "")}`;
     const url = new URL(normalized);
 
     const hostAndPath = `${url.host}${url.pathname}`.replace(/\/+$/, "").toLowerCase();
@@ -131,7 +133,7 @@ export async function bindDeepLinkListeners(
           | undefined;
         const action =
           parseDeepLinkExtra(extra) ??
-          parseDeepLinkUrl("rinde://income");
+          parseDeepLinkUrl(`${DEFAULT_DEEP_LINK_SCHEME}://income`);
         if (action) onAction(action);
       },
     );

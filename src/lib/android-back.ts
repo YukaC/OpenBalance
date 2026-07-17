@@ -5,7 +5,7 @@
 
 import { isRunningInNativeApp } from "@/lib/device";
 
-const OVERLAY_HISTORY_FLAG = "rindeOverlay";
+const OVERLAY_HISTORY_FLAG = "openBalanceOverlay";
 
 type OverlayHistoryState = {
   [OVERLAY_HISTORY_FLAG]?: boolean;

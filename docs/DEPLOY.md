@@ -1,4 +1,4 @@
-# Deploy Rinde (AppFinanzas)
+# Deploy OpenBalance (AppFinanzas)
 
 Production on **Vercel** + repo on **GitHub**, with **Neon Postgres** as the database.
 Auth is **Auth.js (Credentials)** inside this app — do **not** enable Neon Auth.
@@ -89,7 +89,7 @@ Pushes to the production branch redeploy automatically.
 | `NEXT_PUBLIC_ANDROID_DOWNLOAD_URL` | Optional | Mobile-web “Descargá la app” banner |
 | `NEXT_PUBLIC_IOS_DOWNLOAD_URL` | Optional | Same, iOS |
 | `RESEND_API_KEY` | Optional | Sends password-reset emails via Resend HTTP API (no npm package) |
-| `RESEND_FROM` | Optional | From address for Resend (default `Rinde <onboarding@resend.dev>`) |
+| `RESEND_FROM` | Optional | From address for Resend (default `OpenBalance <onboarding@resend.dev>`) |
 | `AUTH_DEV_RESET_URL` | Optional | `1` to include `resetUrl` in forgot-password API responses (also on in non-production) |
 | `SMTP_URL` | Optional | Reserved for later SMTP/Nodemailer; **not wired yet** |
 

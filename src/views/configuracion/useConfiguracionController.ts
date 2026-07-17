@@ -181,7 +181,7 @@ export function useConfiguracionController() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `rinde-movimientos-${profile.defaultCurrency.toLowerCase()}.csv`;
+    anchor.download = `openbalance-movimientos-${profile.defaultCurrency.toLowerCase()}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -243,7 +243,7 @@ export function useConfiguracionController() {
   async function handleExportBackup() {
     const payload = exportBackup();
     await downloadJsonFile(
-      `rinde-respaldo-${payload.exportedAt.slice(0, 10)}.json`,
+      `openbalance-respaldo-${payload.exportedAt.slice(0, 10)}.json`,
       payload,
     );
   }
@@ -320,7 +320,7 @@ export function useConfiguracionController() {
         const text = await file.text();
         const payload = parseFinanceBackup(text);
         if (!payload) {
-          setImportMessage("El archivo no es un respaldo válido de Rinde.");
+          setImportMessage("El archivo no es un respaldo válido de OpenBalance.");
           return;
         }
         restoreBackup(payload);

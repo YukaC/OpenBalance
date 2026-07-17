@@ -1,8 +1,12 @@
-# Rinde
+# OpenBalance
 
 App de finanzas personales pensada para quien cobra **por semana** y decide **por mes**.
 
 Cargá ingresos y gastos con poca fricción, clasificá por keywords y mirá el resumen del mes en segundos.
+
+Repo: [YukaC/OpenBalance](https://github.com/YukaC/OpenBalance).
+
+**Nota de migración:** las claves de `localStorage` / IndexedDB pasaron de `rinde-*` a `openbalance-*` (p. ej. tema, finance persist, auth nativo). La app lee las claves legacy y reescribe en el nuevo prefijo para no perder datos.
 
 ## Stack
 
