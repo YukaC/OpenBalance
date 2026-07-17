@@ -7,6 +7,7 @@ import { AccountSecuritySection } from "@/views/configuracion/AccountSecuritySec
 import { AccountsSection } from "@/views/configuracion/AccountsSection";
 import { DataSection } from "@/views/configuracion/DataSection";
 import { DownloadAppSection } from "@/views/configuracion/DownloadAppSection";
+import { ImportPdfSection } from "@/views/configuracion/ImportPdfSection";
 import { PaydaySection } from "@/views/configuracion/PaydaySection";
 import { PinSection } from "@/views/configuracion/PinSection";
 import { ProfileSection } from "@/views/configuracion/ProfileSection";
@@ -79,6 +80,9 @@ export default function ConfiguracionView() {
         onSavingsGoalChange={(goal) =>
           controller.updateProfile({ monthlySavingsGoal: goal })
         }
+        onManualExchangeRateChange={(rate) =>
+          controller.updateProfile({ manualExchangeRate: rate })
+        }
       />
 
       <AccountsSection
@@ -125,6 +129,10 @@ export default function ConfiguracionView() {
         isSavingPin={controller.isSavingPin}
         onSavePin={controller.handleSavePin}
         onDisablePin={controller.handleDisablePin}
+        canUseBiometric={controller.canUseBiometric}
+        biometricEnabled={controller.biometricEnabled}
+        isTogglingBiometric={controller.isTogglingBiometric}
+        onToggleBiometric={controller.handleToggleBiometric}
       />
 
       <SyncSection />
@@ -141,6 +149,8 @@ export default function ConfiguracionView() {
         onRestoreBackup={controller.handleRestoreBackup}
         onReset={controller.handleReset}
       />
+
+      <ImportPdfSection />
 
       <DownloadAppSection />
 

@@ -164,8 +164,11 @@ PR: `feat/sync-status-and-legacy-migrate` (+ `fix/sync-clock-skew-and-echo` para
 - **Done when:** endpoint que hace `SELECT 1` (o `isDatabaseConfigured()`) y devuelve estado + latencia.
 
 ### H9. CSP sin `unsafe-inline`/`unsafe-eval`
-- `next.config.ts` tiene `script-src 'self' 'unsafe-inline' 'unsafe-eval'`, que anula gran parte del valor de la CSP contra XSS.
-- **Done when:** migrar a nonces (soportado por Next.js vía middleware) y confirmar si `unsafe-eval` es realmente necesario en producción.
+- `next.config.ts` tenía `script-src 'self' 'unsafe-inline' 'unsafe-eval'`, que anulaba gran parte del valor de la CSP contra XSS.
+- **Estado (2026-07-16):**
+  - **SSR (Vercel):** `src/middleware.ts` genera nonce por request; `script-src` producción = `'self' 'nonce-…' 'strict-dynamic'` — **sin** `unsafe-inline` ni `unsafe-eval`. Layout lee `x-nonce` y lo aplica al script de tema. `style-src` sigue con `unsafe-inline` (Tailwind).
+  - **Export Capacitor:** middleware no corre (`build-mobile` lo aparta); `next.config` mantiene CSP estática con `unsafe-inline` en scripts.
+  - **Partial win documentado:** `unsafe-inline` eliminado de `script-src` en el path SSR; no en export estático ni en `style-src`.
 
 ### H10. Migraciones: pasar de `db:push` a `db:generate` + `db:migrate` en producción
 - `docs/DEPLOY.md` documenta `db:push` como flujo día a día contra Neon en prod. `drizzle-kit push` puede pedir un diff destructivo (drop+recreate) en cambios de columna con datos existentes — el riesgo de pérdida de datos real más alto del roadmap operativo.
@@ -443,8 +446,8 @@ PRs chicos por ítem: `feat/classifier-memory`, `feat/pdf-card-import`, `feat/re
 - `TransactionForm` y `ConfirmDialog` reimplementan su propia lógica de focus-trap + captura de `Tab`/`Escape` por separado — riesgo de que diverjan con el tiempo (DRY).
 - **Done when:** ambos componentes usan el mismo hook.
 
-### J8. i18n — deuda consciente, no urgente
-- Todo el texto está hardcodeado en español (incluso el locale `es` de `date-fns`), sin `next-intl`/`i18next`. No bloquea nada hoy; documentar como decisión consciente en vez de tocarlo ahora — soportar otro idioma requeriría revisar prácticamente cada componente.
+### J8. i18n — deuda consciente, no urgente (diferido a propósito)
+- Todo el texto de UI está hardcodeado en español (incluido el locale `es` de `date-fns`); no hay `next-intl` / `i18next` ni catálogos de mensajes. **No implementar i18n en esta ola:** es deuda consciente — el producto es AR/ES-first y un segundo idioma obligaría a tocar casi cada componente, toast y string de validación. Revisar solo si aparece demanda real de otro mercado; hasta entonces queda explícitamente fuera del sprint.
 
 ### Entregable
 PR: `feat/ux-consistency-undo-and-a11y` (J1-J5) + `chore/focus-trap-hook` (J7)
@@ -480,8 +483,10 @@ PR: `feat/ux-consistency-undo-and-a11y` (J1-J5) + `chore/focus-trap-hook` (J7)
 ### F7. Pre-commit hooks
 - No hay `.husky/` ni `lint-staged`; el único feedback de lint/typecheck es en CI. Agregar hook simple de pre-commit (typecheck+lint en archivos staged) — **pedir OK** de dependencia (`husky`/`lint-staged`).
 
-### F8. Herramientas de regresión visual/accesibilidad
-- Sin `axe-core` ni snapshots de a11y en CI. Con pantallas de auth/PIN/formularios, una regresión de contraste o foco pasaría desapercibida. Baja prioridad; evaluar junto con F2.
+### F8. Herramientas de regresión visual/accesibilidad (liviano, sin Chromatic)
+- `axe-core` en devDependencies + `src/lib/a11y-smoke.test.ts` (import OK; `axe.run` skip si no hay DOM/jsdom).
+- Lint: `next/core-web-vitals` ya trae jsx-a11y — no desactivar en `eslint.config.mjs`.
+- Checklist manual: `docs/A11Y.md` + `scripts/a11y-check.mjs`. Snapshots Chromatic / Playwright+axe siguen fuera de alcance hasta que F2 lo justifique.
 
 ### Entregable
 PR: `chore/sync-tests-and-hardening`
@@ -558,3 +563,134 @@ Se lanzaron 8 subagentes de solo lectura (`claude-sonnet-5-thinking-high`) para 
 | Backend/API | Fase H (H2, H4, H8, H10) |
 
 El hallazgo de mayor impacto transversal: **el PIN no cifra nada** (Fase S) y **el CI nunca corre los tests** (H1) — ambos ya identificados en el plan original o de esfuerzo trivial, confirmados de forma independiente por los subagentes de seguridad, backend y testing.
+
+---
+
+## 9. Estado de implementación (2026-07-16)
+
+Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: **DONE** = criterio cubierto en código; **PARTIAL** = hay avance real pero falta el “done when”; **TODO** = sin implementación usable.
+
+### Fase A — Sync UX
+| Ítem | Estado | Nota |
+|------|--------|------|
+| A1 Sync chip | DONE | `SyncStatusChip` + `sync-status.ts` |
+| A2 Flush leave | DONE | `keepalive` dirty-only; smoke en `docs/DEPLOY.md` |
+| A3 LWW toast | DONE | Toast en `applyRemoteSyncChanges` |
+| A4 Migrate v2→v3 | DONE | `finance-store` copia `rinde-finance-v2` |
+| A5 Clock-skew | PARTIAL | Skew + tolerancia en `isChangedSince`; falta test “reloj atrasado” explícito |
+| A6 Online retry | DONE | Listener `online` + backoff en `auto-sync.ts` |
+| A7 Echo pull | DONE | `excludeIncomingEcho` en `sync-server.ts` |
+
+### Fase H — Hardening
+| Ítem | Estado | Nota |
+|------|--------|------|
+| H1 CI `pnpm test` | DONE | Step en `.github/workflows/ci.yml` |
+| H2 Sync transaction | DONE | `db.transaction` en apply |
+| H3 Rate limit | DONE | `rate-limit.ts` en auth/sync |
+| H4 Payload size | DONE | `content-length` → 413 |
+| H5 Anti-enum register | DONE | Mensaje genérico |
+| H6 `AUTH_SECRET` | DONE | `assertAuthSecret` |
+| H7 Logs sync | DONE | `logError` sin payload |
+| H8 `/api/health` | DONE | Route + ping DB |
+| H9 CSP strict | PARTIAL | Prod sin `unsafe-eval`; sigue `unsafe-inline` |
+| H10 Migraciones prod | DONE | `DEPLOY.md` reserva `db:push` a local |
+
+### Fase S — Cifrado
+| Ítem | Estado | Nota |
+|------|--------|------|
+| S1 AES-GCM + PBKDF2 | DONE | `crypto-store.ts` |
+| S2 IndexedDB | DONE | `encrypted-storage.ts` |
+| S3 Unlock cifra | DONE | PIN deriva sesión en `pin-lock.ts` |
+| S4 Biometría | TODO | Sin plugin Capacitor |
+
+### Fase O — Offline PWA
+| Ítem | Estado | Nota |
+|------|--------|------|
+| O1 Service Worker | DONE | `public/sw.js` + `ServiceWorkerRegister` (sin Workbox) |
+| O2 Cola mutaciones | PARTIAL | Online/backoff + SW message; sin cola IDB dedicada |
+| O3 Chip offline | DONE | Unificado en A1 |
+| O4 Chunk keepalive | PARTIAL | Desactiva keepalive >50KB; no parte en N requests |
+
+### Fase B — Auth producto
+| Ítem | Estado | Nota |
+|------|--------|------|
+| B1 Reset password | PARTIAL | API + Resend/tokens; falta UI en `AuthScreen` |
+| B2 Cambio email/password | PARTIAL | Cambio password en Config; sin cambio de email |
+| B3 Export cloud-ready | PARTIAL | Backup respeta `updatedAt`/`deletedAt`; CSV menos completo |
+
+### Fase C — Android
+| Ítem | Estado | Nota |
+|------|--------|------|
+| C1 Sesión WebView | PARTIAL | Docs/`API_BASE`; cookies SameSite no cerradas |
+| C2 Pipeline build | DONE | `build-mobile.mjs` + `cap:sync` |
+| C3 Banner download | DONE | `DownloadAppSection` + env URLs |
+
+### Fase K — Mobile avanzado
+| Ítem | Estado | Nota |
+|------|--------|------|
+| K1 Backup nativo | PARTIAL | Share/`download` fallback; sin `@capacitor/filesystem` |
+| K2 Back button | PARTIAL | History soft-back; sin `@capacitor/app` |
+| K3 Icons/splash | PARTIAL | Manifest maskable SVG; sin PNG 192/512 ni splash plugin |
+| K4 Haptics | TODO | — |
+| K5 Safe-area L/R | PARTIAL | Vars CSS definidas; casi no aplicadas al layout |
+| K6 Deep links | TODO | — |
+
+### Fase D — Saldos / transferencias
+| Ítem | Estado | Nota |
+|------|--------|------|
+| D1 Saldo por cuenta | DONE | `sumByAccount` / `computeAccountBalance` + UI |
+| D2 Transferencias | DONE | `addTransfer` + `transferGroupId` |
+| D3 Filtro cuenta | DONE | Filtro en `TransaccionesView` |
+| D4 Deuda cuotas | DONE | `summaries` + widget en Resumen |
+
+### Fase I — Performance
+| Ítem | Estado | Nota |
+|------|--------|------|
+| I1 Índice mensual | PARTIAL | API `prefilteredMonthTransactions`; Resumen no la usa aún |
+| I2 Persist async | DONE | Adapter async IDB (S2) |
+| I3 Code-split forms | DONE | `dynamic()` en `AppShell` |
+| I4 Debounce search | DONE | ~150–200ms en Transacciones |
+| I5 Repair 1× sesión | DONE | `repair-session.ts` |
+
+### Fase E — Presupuestos / metas
+| Ítem | Estado | Nota |
+|------|--------|------|
+| E1 Presupuesto × semanas | PARTIAL | Alertas pay-week; sin barras/breakdown por semana |
+| E2 Meta ahorro | DONE | Profile + progreso en Resumen |
+| E3 Notif nativa cobro | TODO | Solo banner in-app (`payday-reminder`) |
+
+### Fase G — Robustez
+| Ítem | Estado | Nota |
+|------|--------|------|
+| G1 Clasificador memoria | DONE | Threshold 2 en `classifier.ts` |
+| G2 Import PDF | DONE | `ImportPdfSection` + `pdfjs-dist` |
+| G3 Virtualización | DONE | `@tanstack/react-virtual` en Transacciones |
+| G4 FX manual | TODO | — |
+| G5 Ranking keywords | DONE | Gana keyword más larga |
+| G6 Ingreso auto-proyección | PARTIAL | `projectRecurringIncomeToMonth` + tests; no cableado a UI/store |
+| G7 Cadencia biweekly | DONE | En `recurring-expense.ts` |
+
+### Fase J — UX / a11y
+| Ítem | Estado | Nota |
+|------|--------|------|
+| J1 Undo categorías | DONE | Undo-toast en Categorias |
+| J2 Errores inline edit | DONE | `aria-invalid` en nombre/presupuesto |
+| J3 Validación form | DONE | Monto/fecha/categoría inline |
+| J4 aria Auth/PIN | DONE | `aria-invalid` / `describedby` |
+| J5 Toast pause/close | DONE | Hover/focus + cerrar |
+| J6 Calendario teclado | DONE | Flechas + roving tabindex |
+| J7 `useFocusTrap` | DONE | Hook compartido |
+| J8 i18n | DONE | Deuda consciente documentada (no implementar) |
+
+### Fase F — Ops
+| Ítem | Estado | Nota |
+|------|--------|------|
+| F1 Tests sync | PARTIAL | `sync-client.test.ts`; sin `auto-sync`/`sync-server` tests |
+| F1b Tests store | DONE | `finance-store.test.ts` |
+| F2 Tests UI | PARTIAL | `@playwright/test` en deps; sin config/specs aún |
+| F3 Observabilidad | PARTIAL | `logger.ts` en APIs; sin Sentry |
+| F4 Rate limit | DONE | Cubierto por H3 |
+| F5 CI tests | DONE | Alias de H1 |
+| F6 Docs modelo | DONE | JSDoc pay-week en `types`/`dates`/`summaries` |
+| F7 Pre-commit | PARTIAL | `husky`/`lint-staged` en package.json; falta `.husky/` |
+| F8 A11y liviano | DONE | `axe-core` + smoke test + `docs/A11Y.md` + eslint jsx-a11y intacto |

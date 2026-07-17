@@ -4,6 +4,8 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { triggerLoginSync } from "@/lib/auto-sync";
 import { getApiBaseUrl } from "@/lib/auth-flags";
+import { isRunningInNativeApp } from "@/lib/device";
+import { loginNativeWithPassword } from "@/lib/native-auth";
 
 type AuthTab = "login" | "register";
 type AuthErrorField = "name" | "email" | "password" | "credentials";
@@ -77,6 +79,25 @@ export function AuthScreen() {
   }
 
   async function handleCredentialsSignIn(): Promise<boolean> {
+    // Capacitor WebView: cookies to Vercel are unreliable — use Bearer JWT (C1).
+    if (isRunningInNativeApp()) {
+      const nativeResult = await loginNativeWithPassword(
+        email.trim(),
+        password,
+      );
+      if (!nativeResult.ok) {
+        setAuthError(
+          activeTab === "login"
+            ? nativeResult.error
+            : "Cuenta creada, pero no se pudo iniciar sesión.",
+          "credentials",
+        );
+        return false;
+      }
+      triggerLoginSync(email.trim().toLowerCase());
+      return true;
+    }
+
     const result = await signIn("credentials", {
       email: email.trim(),
       password,

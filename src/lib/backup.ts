@@ -153,6 +153,7 @@ export function parseFinanceBackup(raw: string): FinanceBackupPayload | null {
       ? parsed.exportedAt
       : new Date().toISOString();
 
+  // ensureLifecycle preserves existing updatedAt/deletedAt (B3 cloud-ready round-trip).
   const categories = migrateBackupEntities(
     parsed.categories.filter(isValidCategory),
     nowIso,
@@ -213,22 +214,59 @@ function downloadJsonViaAnchor(filename: string, blob: Blob): void {
 }
 
 /**
- * Export JSON via Web Share (preferred on mobile / Capacitor WebView) then
- * fall back to `<a download>`. Native filesystem save needs `@capacitor/filesystem`
- * + `@capacitor/share` (not installed — see docs/MOBILE.md).
- *
- * `@capacitor/core` alone has no file I/O; we only use device detection from it.
+ * Native export via Filesystem + Share (K1). Writes to Cache then opens the
+ * system share sheet so the user can save/send the backup.
+ */
+async function downloadJsonViaNativeShare(
+  filename: string,
+  jsonText: string,
+): Promise<boolean> {
+  if (!isRunningInNativeApp()) return false;
+  try {
+    const { Filesystem, Directory, Encoding } = await import(
+      "@capacitor/filesystem"
+    );
+    const { Share } = await import("@capacitor/share");
+
+    const safeName = filename.replace(/[^\w.\-]+/g, "_");
+    await Filesystem.writeFile({
+      path: safeName,
+      data: jsonText,
+      directory: Directory.Cache,
+      encoding: Encoding.UTF8,
+    });
+    const { uri } = await Filesystem.getUri({
+      path: safeName,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: filename,
+      url: uri,
+      dialogTitle: "Exportar backup",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Export JSON: native Filesystem+Share (K1) → Web Share → `<a download>`.
  */
 export async function downloadJsonFile(
   filename: string,
   data: unknown,
 ): Promise<void> {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
+  const jsonText = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonText], {
     type: "application/json;charset=utf-8",
   });
 
-  // Prefer share on mobile / Capacitor — `<a download>` is unreliable in WebViews.
-  // `@capacitor/core` has no file I/O; native save needs filesystem/share plugins (see MOBILE.md).
+  if (await downloadJsonViaNativeShare(filename, jsonText)) {
+    return;
+  }
+
+  // Prefer share on mobile web — `<a download>` is unreliable on phones.
   const shouldPreferShare =
     canShareFiles() && (isRunningInNativeApp() || isMobileWebBrowser());
 

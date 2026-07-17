@@ -112,3 +112,24 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirstStatic(request));
   }
 });
+
+/**
+ * Optional Background Sync (O2): when the browser fires `sync` for our tag,
+ * nudge open clients to flush pending local changes. Sync itself stays in the
+ * page (cookies / Zustand); the SW only postMessages.
+ */
+const SYNC_PENDING_TAG = "rinde-sync-pending";
+const SYNC_PENDING_MESSAGE = { type: "RINDE_SYNC_PENDING" };
+
+self.addEventListener("sync", (event) => {
+  if (event.tag !== SYNC_PENDING_TAG) return;
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          client.postMessage(SYNC_PENDING_MESSAGE);
+        }
+      }),
+  );
+});

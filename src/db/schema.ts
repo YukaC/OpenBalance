@@ -60,6 +60,8 @@ export const profiles = pgTable("profiles", {
     .notNull()
     .default(false),
   monthlySavingsGoal: doublePrecision("monthly_savings_goal"),
+  /** ARS per 1 USD — user-entered; never from an FX API. */
+  manualExchangeRate: doublePrecision("manual_exchange_rate"),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
     .notNull()
     .defaultNow(),
@@ -148,6 +150,8 @@ export const userRules = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     pattern: text("pattern").notNull(),
     categoryId: text("category_id").notNull(),
+    priority: integer("priority").notNull().default(0),
+    confirmCount: integer("confirm_count").notNull().default(1),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),

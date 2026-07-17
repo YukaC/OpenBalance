@@ -10,19 +10,47 @@ const LEAVE_SYNC_COOLDOWN_MS = 2500;
 
 const LOGIN_RETRY_DELAYS_MS = [0, 1500, 4000] as const;
 
+/**
+ * Post-failure backoff for idle / online sync (A6 / O2).
+ * First attempt is immediate; then wait these delays before each retry (3 retries max).
+ */
+export const IDLE_ONLINE_RETRY_DELAYS_MS = [2_000, 8_000, 30_000] as const;
+
+const BACKGROUND_SYNC_TAG = "rinde-sync-pending";
+const SW_SYNC_MESSAGE_TYPE = "RINDE_SYNC_PENDING";
+
 let idleTimerId: ReturnType<typeof setTimeout> | null = null;
 let storeUnsubscribe: (() => void) | null = null;
 let pageLeaveBound = false;
 let onlineBound = false;
+let swMessageBound = false;
 let activeSessionKey: string | null = null;
 let isSyncInFlight = false;
 let loginSyncGeneration = 0;
+/** Bumps to cancel in-flight idle/online backoff loops. */
+let retrySyncGeneration = 0;
 let lastLeaveSyncAt = 0;
 
 function clearIdleTimer() {
   if (idleTimerId == null) return;
   clearTimeout(idleTimerId);
   idleTimerId = null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Pure helper: delay before retry attempt `retryIndex` (0 = first retry after failure).
+ * Returns null when the index is out of range (attempts capped).
+ */
+export function getIdleOnlineRetryDelayMs(
+  retryIndex: number,
+  delaysMs: readonly number[] = IDLE_ONLINE_RETRY_DELAYS_MS,
+): number | null {
+  if (retryIndex < 0 || retryIndex >= delaysMs.length) return null;
+  return delaysMs[retryIndex] ?? null;
 }
 
 async function runSyncSafely(options?: {
@@ -46,6 +74,49 @@ async function runSyncSafely(options?: {
   }
 }
 
+/**
+ * One immediate attempt, then up to IDLE_ONLINE_RETRY_DELAYS_MS.length retries
+ * with exponential-ish backoff (2s → 8s → 30s). Used for idle + online (not leave).
+ */
+async function syncWithBackoffRetries(options?: {
+  onlyIfDirty?: boolean;
+}): Promise<boolean> {
+  const generation = ++retrySyncGeneration;
+  const sessionKey = activeSessionKey;
+
+  const firstOk = await runSyncSafely(options);
+  if (firstOk) return true;
+
+  for (let retryIndex = 0; retryIndex < IDLE_ONLINE_RETRY_DELAYS_MS.length; retryIndex++) {
+    const delayMs = getIdleOnlineRetryDelayMs(retryIndex);
+    if (delayMs == null) break;
+    if (generation !== retrySyncGeneration) return false;
+    if (activeSessionKey !== sessionKey) return false;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      requestBackgroundSyncIfSupported();
+      return false;
+    }
+
+    await sleep(delayMs);
+
+    if (generation !== retrySyncGeneration) return false;
+    if (activeSessionKey !== sessionKey) return false;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      requestBackgroundSyncIfSupported();
+      return false;
+    }
+    if (options?.onlyIfDirty && !hasPendingLocalChanges()) return true;
+
+    const ok = await runSyncSafely(options);
+    if (ok) return true;
+  }
+
+  if (hasPendingLocalChanges()) {
+    requestBackgroundSyncIfSupported();
+  }
+  return false;
+}
+
 function scheduleIdleSync() {
   if (!isAuthEnabled()) return;
   if (activeSessionKey == null) return;
@@ -53,8 +124,30 @@ function scheduleIdleSync() {
   idleTimerId = setTimeout(() => {
     idleTimerId = null;
     // Idle flush only if something actually changed since last sync.
-    void runSyncSafely({ onlyIfDirty: true });
+    void syncWithBackoffRetries({ onlyIfDirty: true });
   }, IDLE_SYNC_MS);
+}
+
+/**
+ * Ask the SW to wake us when the network is back (optional; browsers may no-op).
+ */
+function requestBackgroundSyncIfSupported() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return;
+  }
+  void navigator.serviceWorker.ready
+    .then((registration) => {
+      const syncManager = (
+        registration as ServiceWorkerRegistration & {
+          sync?: { register: (tag: string) => Promise<void> };
+        }
+      ).sync;
+      if (!syncManager?.register) return;
+      return syncManager.register(BACKGROUND_SYNC_TAG);
+    })
+    .catch(() => {
+      // Background Sync unsupported / denied — online listener still covers reconnect.
+    });
 }
 
 /**
@@ -73,6 +166,7 @@ function flushPendingOnLeave() {
 
   clearIdleTimer();
   void runSyncSafely({ keepalive: true, onlyIfDirty: true });
+  requestBackgroundSyncIfSupported();
 }
 
 function onVisibilityChange() {
@@ -81,11 +175,12 @@ function onVisibilityChange() {
   }
 }
 
-/** Retry pending uploads as soon as the network comes back (A6). */
+/** Retry pending uploads as soon as the network comes back (A6 / O2). */
 function onOnline() {
   if (!isAuthEnabled()) return;
   if (activeSessionKey == null) return;
-  void runSyncSafely({ onlyIfDirty: true });
+  if (!hasPendingLocalChanges()) return;
+  void syncWithBackoffRetries({ onlyIfDirty: true });
 }
 
 function onStoreChanged(
@@ -106,6 +201,18 @@ function onStoreChanged(
     return;
   }
   scheduleIdleSync();
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    requestBackgroundSyncIfSupported();
+  }
+}
+
+function onServiceWorkerMessage(event: MessageEvent) {
+  if (!isAuthEnabled()) return;
+  if (activeSessionKey == null) return;
+  const data = event.data as { type?: string } | null;
+  if (data?.type !== SW_SYNC_MESSAGE_TYPE) return;
+  if (!hasPendingLocalChanges()) return;
+  void syncWithBackoffRetries({ onlyIfDirty: true });
 }
 
 function bindPageLeaveListeners() {
@@ -134,13 +241,30 @@ function unbindOnlineListener() {
   onlineBound = false;
 }
 
+function bindServiceWorkerMessageListener() {
+  if (swMessageBound || typeof navigator === "undefined") return;
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.addEventListener("message", onServiceWorkerMessage);
+  swMessageBound = true;
+}
+
+function unbindServiceWorkerMessageListener() {
+  if (!swMessageBound || typeof navigator === "undefined") return;
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.removeEventListener(
+    "message",
+    onServiceWorkerMessage,
+  );
+  swMessageBound = false;
+}
+
 async function syncOnLoginWithRetry(sessionKey: string) {
   const generation = ++loginSyncGeneration;
   for (const delayMs of LOGIN_RETRY_DELAYS_MS) {
     if (generation !== loginSyncGeneration) return;
     if (activeSessionKey !== sessionKey) return;
     if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      await sleep(delayMs);
     }
     if (generation !== loginSyncGeneration) return;
     if (activeSessionKey !== sessionKey) return;
@@ -153,9 +277,10 @@ async function syncOnLoginWithRetry(sessionKey: string) {
 /**
  * Start automatic sync for an authenticated session:
  * - push/pull immediately on login (with short retries)
- * - push after IDLE_SYNC_MS quiet time only if dirty
+ * - push after IDLE_SYNC_MS quiet time only if dirty (with backoff retries)
  * - push on tab hide / page leave only if dirty (keepalive)
- * - push when the browser comes back online if dirty
+ * - push when the browser comes back online if dirty (with backoff retries)
+ * - optional Background Sync tag → SW postMessage → client retry
  */
 export function startAutoSync(sessionKey: string) {
   if (!isAuthEnabled()) {
@@ -176,16 +301,19 @@ export function startAutoSync(sessionKey: string) {
   }
   bindPageLeaveListeners();
   bindOnlineListener();
+  bindServiceWorkerMessageListener();
 
   void syncOnLoginWithRetry(sessionKey);
 }
 
 export function stopAutoSync() {
   loginSyncGeneration += 1;
+  retrySyncGeneration += 1;
   activeSessionKey = null;
   clearIdleTimer();
   unbindPageLeaveListeners();
   unbindOnlineListener();
+  unbindServiceWorkerMessageListener();
   if (storeUnsubscribe) {
     storeUnsubscribe();
     storeUnsubscribe = null;

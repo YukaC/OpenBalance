@@ -13,6 +13,11 @@ type PinSectionProps = {
   isSavingPin: boolean;
   onSavePin: () => void;
   onDisablePin: () => void;
+  /** S4 — only meaningful on Capacitor when hardware is available. */
+  canUseBiometric?: boolean;
+  biometricEnabled?: boolean;
+  isTogglingBiometric?: boolean;
+  onToggleBiometric?: (enabled: boolean) => void;
 };
 
 export function PinSection({
@@ -28,6 +33,10 @@ export function PinSection({
   isSavingPin,
   onSavePin,
   onDisablePin,
+  canUseBiometric = false,
+  biometricEnabled = false,
+  isTogglingBiometric = false,
+  onToggleBiometric,
 }: PinSectionProps) {
   return (
     <CollapsibleLedgerSection
@@ -138,6 +147,29 @@ export function PinSection({
           </button>
         ) : null}
       </div>
+
+      {pinEnabled && canUseBiometric && onToggleBiometric ? (
+        <label className="mt-2 flex cursor-pointer items-start gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--bg)] px-3.5 py-3">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 accent-[var(--ink)]"
+            checked={biometricEnabled}
+            disabled={isTogglingBiometric}
+            onChange={(event) => {
+              void onToggleBiometric(event.target.checked);
+            }}
+          />
+          <span className="min-w-0">
+            <span className="block text-[14px] font-semibold text-[var(--ink)]">
+              Desbloquear con huella / Face ID
+            </span>
+            <span className="mt-0.5 block text-[12.5px] text-[var(--ink-soft)]">
+              Pedimos el PIN una vez al activarlo; después podés abrir la app con
+              biometría. El cifrado sigue basado en el PIN.
+            </span>
+          </span>
+        </label>
+      ) : null}
     </CollapsibleLedgerSection>
   );
 }

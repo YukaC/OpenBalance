@@ -191,6 +191,53 @@ function parseStoredRaw(raw: string): EncryptedBlob | StorageValue<unknown> | nu
   }
 }
 
+/** Debounce window for persist writes (I2) — coalesces rapid mutations. */
+const PERSIST_SET_DEBOUNCE_MS = 400;
+
+type PendingPersistWrite = {
+  name: string;
+  value: unknown;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+};
+
+const pendingPersistWrites = new Map<string, PendingPersistWrite>();
+const persistWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+async function flushPersistWrite(name: string): Promise<void> {
+  const pending = pendingPersistWrites.get(name);
+  pendingPersistWrites.delete(name);
+  persistWriteTimers.delete(name);
+  if (!pending) return;
+
+  try {
+    await writePersistValue(pending.name, pending.value);
+    pending.resolve();
+  } catch (error) {
+    pending.reject(error);
+  }
+}
+
+async function writePersistValue(name: string, value: unknown): Promise<void> {
+  const existingRaw = await readRaw(name);
+  const existingParsed = existingRaw ? parseStoredRaw(existingRaw) : null;
+  const key = getSessionCryptoKey();
+
+  // Never clobber ciphertext while PIN is still enabled but session locked.
+  // After clearPin(), allow rewrite to plaintext.
+  if (isEncryptedBlob(existingParsed) && !key && isPinEnabled()) {
+    return;
+  }
+
+  if (key) {
+    const encrypted = await encryptJson(value, key);
+    await writeRaw(name, JSON.stringify(encrypted));
+    return;
+  }
+
+  await writeRaw(name, JSON.stringify(value));
+}
+
 export function createEncryptedPersistStorage<S>(): PersistStorage<S, Promise<void>> {
   return {
     getItem: async (name) => {
@@ -218,27 +265,34 @@ export function createEncryptedPersistStorage<S>(): PersistStorage<S, Promise<vo
       return parsed as StorageValue<S>;
     },
 
-    setItem: async (name, value) => {
-      const existingRaw = await readRaw(name);
-      const existingParsed = existingRaw ? parseStoredRaw(existingRaw) : null;
-      const key = getSessionCryptoKey();
+    setItem: (name, value) => {
+      return new Promise<void>((resolve, reject) => {
+        const previous = pendingPersistWrites.get(name);
+        if (previous) {
+          previous.resolve();
+        }
+        pendingPersistWrites.set(name, { name, value, resolve, reject });
 
-      // Never clobber ciphertext while PIN is still enabled but session locked.
-      // After clearPin(), allow rewrite to plaintext.
-      if (isEncryptedBlob(existingParsed) && !key && isPinEnabled()) {
-        return;
-      }
-
-      if (key) {
-        const encrypted = await encryptJson(value, key);
-        await writeRaw(name, JSON.stringify(encrypted));
-        return;
-      }
-
-      await writeRaw(name, JSON.stringify(value));
+        const existingTimer = persistWriteTimers.get(name);
+        if (existingTimer) clearTimeout(existingTimer);
+        persistWriteTimers.set(
+          name,
+          setTimeout(() => {
+            void flushPersistWrite(name);
+          }, PERSIST_SET_DEBOUNCE_MS),
+        );
+      });
     },
 
     removeItem: async (name) => {
+      const existingTimer = persistWriteTimers.get(name);
+      if (existingTimer) clearTimeout(existingTimer);
+      persistWriteTimers.delete(name);
+      const pending = pendingPersistWrites.get(name);
+      if (pending) {
+        pendingPersistWrites.delete(name);
+        pending.resolve();
+      }
       await removeRaw(name);
     },
   };

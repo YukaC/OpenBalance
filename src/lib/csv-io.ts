@@ -163,3 +163,69 @@ export function parseTransactionsCsv(
 
   return { rows, skippedCount };
 }
+
+function escapeCsvCell(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+/**
+ * Build a CSV export of active (non soft-deleted) transactions.
+ * Soft-deleted rows are intentionally omitted (B3).
+ */
+export function buildTransactionsCsv(
+  transactions: Array<{
+    date: string;
+    type: TransactionType;
+    title: string;
+    amount: number;
+    currency: "ARS" | "USD";
+    method: PaymentMethod;
+    categoryId: string | null;
+    incomeSourceId: string | null;
+    note: string;
+    month: string;
+    weekIso: string;
+    deletedAt?: string | null;
+  }>,
+  categoryNameById: Map<string, string>,
+  sourceNameById: Map<string, string>,
+  methodLabelById: Record<string, string>,
+): string {
+  const header = [
+    "fecha",
+    "tipo",
+    "titulo",
+    "monto",
+    "moneda",
+    "metodo",
+    "categoria",
+    "fuente",
+    "nota",
+    "mes",
+    "semana",
+  ];
+  const rows = [...transactions]
+    .filter((tx) => tx.deletedAt == null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map((tx) =>
+      [
+        tx.date,
+        tx.type,
+        tx.title,
+        String(tx.amount),
+        tx.currency,
+        methodLabelById[tx.method] ?? tx.method,
+        tx.categoryId ? (categoryNameById.get(tx.categoryId) ?? "") : "",
+        tx.incomeSourceId ? (sourceNameById.get(tx.incomeSourceId) ?? "") : "",
+        tx.note,
+        tx.month,
+        tx.weekIso,
+      ]
+        .map((cell) => escapeCsvCell(String(cell)))
+        .join(","),
+    );
+
+  return [header.join(","), ...rows].join("\n");
+}
+

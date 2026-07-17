@@ -6,6 +6,11 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { CollapsibleLedgerSection } from "@/components/CollapsibleLedgerSection";
 import { isAuthEnabled } from "@/lib/auth-flags";
+import {
+  NATIVE_AUTH_CHANGED_EVENT,
+  clearNativeAuthToken,
+  hasNativeAuthToken,
+} from "@/lib/native-auth";
 import { hasPendingLocalChanges, pushPullSync } from "@/lib/sync-client";
 import {
   SYNC_UI_LABELS,
@@ -59,6 +64,7 @@ export function SyncSection() {
   const [hasPending, setHasPending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [hasError, setHasError] = useState(false);
+  const [hasNativeSession, setHasNativeSession] = useState(false);
 
   const isOnline = useSyncExternalStore(
     subscribeOnline,
@@ -67,7 +73,25 @@ export function SyncSection() {
   );
 
   const authEnabled = isAuthEnabled();
-  const isAuthenticated = status === "authenticated" && Boolean(session?.user);
+  const isAuthenticated =
+    (status === "authenticated" && Boolean(session?.user)) || hasNativeSession;
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function refreshNativeSession() {
+      const hasToken = await hasNativeAuthToken();
+      if (!isCancelled) setHasNativeSession(hasToken);
+    }
+    void refreshNativeSession();
+    function onNativeAuthChanged() {
+      void refreshNativeSession();
+    }
+    window.addEventListener(NATIVE_AUTH_CHANGED_EVENT, onNativeAuthChanged);
+    return () => {
+      isCancelled = true;
+      window.removeEventListener(NATIVE_AUTH_CHANGED_EVENT, onNativeAuthChanged);
+    };
+  }, []);
 
   useEffect(() => {
     return subscribeSyncStatus(() => {
@@ -112,6 +136,7 @@ export function SyncSection() {
 
   async function handleSignOut() {
     setStatusMessage(null);
+    await clearNativeAuthToken();
     await signOut({ redirect: false });
     setStatusMessage("Sesión cerrada. Los datos locales se conservan.");
   }
@@ -158,7 +183,10 @@ export function SyncSection() {
 
       {authEnabled && isAuthenticated ? (
         <p className="text-[12.5px] text-[var(--ink-faint)]">
-          Sesión: {session?.user?.email ?? session?.user?.name ?? "activa"}
+          Sesión:{" "}
+          {session?.user?.email ??
+            session?.user?.name ??
+            (hasNativeSession ? "nativa (Bearer)" : "activa")}
         </p>
       ) : null}
 

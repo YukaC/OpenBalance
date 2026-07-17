@@ -5,9 +5,11 @@
  * Sets NEXT_OUTPUT=export so next.config.ts enables `output: 'export'`
  * without affecting the normal Vercel SSR/API build.
  *
- * During the export, `src/app/api` is temporarily moved aside — Next.js
- * cannot static-export a project that contains Route Handlers. The mobile
- * app is expected to call the remote Vercel API via NEXT_PUBLIC_API_BASE_URL.
+ * During the export, `src/app/api` and `src/middleware.ts` are temporarily
+ * moved aside — Next.js cannot static-export Route Handlers, and middleware
+ * is incompatible with `output: 'export'`. The mobile app calls the remote
+ * Vercel API via NEXT_PUBLIC_API_BASE_URL; CSP for the export uses the
+ * permissive static policy in next.config.ts (middleware nonces are SSR-only).
  *
  * Required env for a usable native app:
  *   NEXT_PUBLIC_API_BASE_URL  — production API origin (e.g. https://rinde.vercel.app)
@@ -29,8 +31,10 @@ import path from "node:path";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const apiDir = path.join(rootDir, "src", "app", "api");
+const middlewareFile = path.join(rootDir, "src", "middleware.ts");
 const stashRoot = path.join(os.tmpdir(), `rinde-mobile-api-stash-${process.pid}`);
 const stashedApiDir = path.join(stashRoot, "api");
+const stashedMiddlewareFile = path.join(stashRoot, "middleware.ts");
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 if (!apiBaseUrl) {
@@ -41,29 +45,52 @@ if (!apiBaseUrl) {
   );
 }
 
-function stashApiRoutes() {
-  if (!existsSync(apiDir)) return false;
+function stashExportIncompatiblePaths() {
+  const stashed = { api: false, middleware: false };
   if (existsSync(stashRoot)) {
     rmSync(stashRoot, { recursive: true, force: true });
   }
   mkdirSync(stashRoot, { recursive: true });
+
   // cp + rm (not rename) so cross-filesystem tmp dirs work
-  cpSync(apiDir, stashedApiDir, { recursive: true });
-  rmSync(apiDir, { recursive: true, force: true });
-  console.log("[build-mobile] Stashed src/app/api for static export");
-  return true;
+  if (existsSync(apiDir)) {
+    cpSync(apiDir, stashedApiDir, { recursive: true });
+    rmSync(apiDir, { recursive: true, force: true });
+    stashed.api = true;
+    console.log("[build-mobile] Stashed src/app/api for static export");
+  }
+
+  if (existsSync(middlewareFile)) {
+    cpSync(middlewareFile, stashedMiddlewareFile);
+    rmSync(middlewareFile, { force: true });
+    stashed.middleware = true;
+    console.log("[build-mobile] Stashed src/middleware.ts for static export");
+  }
+
+  return stashed;
 }
 
-function restoreApiRoutes(wasStashed) {
-  if (!wasStashed) return;
-  if (existsSync(apiDir)) {
-    rmSync(apiDir, { recursive: true, force: true });
+function restoreExportIncompatiblePaths(stashed) {
+  if (!stashed?.api && !stashed?.middleware) return;
+
+  if (stashed.api) {
+    if (existsSync(apiDir)) {
+      rmSync(apiDir, { recursive: true, force: true });
+    }
+    if (existsSync(stashedApiDir)) {
+      mkdirSync(path.dirname(apiDir), { recursive: true });
+      cpSync(stashedApiDir, apiDir, { recursive: true });
+      console.log("[build-mobile] Restored src/app/api");
+    }
   }
-  if (existsSync(stashedApiDir)) {
-    mkdirSync(path.dirname(apiDir), { recursive: true });
-    cpSync(stashedApiDir, apiDir, { recursive: true });
-    console.log("[build-mobile] Restored src/app/api");
+
+  if (stashed.middleware) {
+    if (existsSync(stashedMiddlewareFile)) {
+      cpSync(stashedMiddlewareFile, middlewareFile);
+      console.log("[build-mobile] Restored src/middleware.ts");
+    }
   }
+
   try {
     rmSync(stashRoot, { recursive: true, force: true });
   } catch {
@@ -81,11 +108,11 @@ if (apiBaseUrl) {
   console.log(`[build-mobile] API base: ${apiBaseUrl}`);
 }
 
-let wasStashed = false;
+let stashed = { api: false, middleware: false };
 let exitCode = 1;
 
 try {
-  wasStashed = stashApiRoutes();
+  stashed = stashExportIncompatiblePaths();
 
   const result = spawnSync("npx", ["next", "build"], {
     cwd: rootDir,
@@ -104,7 +131,7 @@ try {
     exitCode = result.status ?? 1;
   }
 } finally {
-  restoreApiRoutes(wasStashed);
+  restoreExportIncompatiblePaths(stashed);
 }
 
 process.exit(exitCode);

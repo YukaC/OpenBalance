@@ -11,6 +11,7 @@ import {
   shouldExposeResetUrl,
   trySendResetEmail,
 } from "@/lib/password-reset";
+import { logError, logInfo } from "@/lib/logger";
 import {
   consumeRateLimit,
   FORGOT_PASSWORD_RATE_LIMIT,
@@ -95,6 +96,10 @@ export async function POST(request: Request) {
 
   // Always return the same shape when the email is unknown (no enumeration).
   if (!user) {
+    logInfo({
+      event: "forgot_password.unknown_email",
+      message: "Forgot-password requested for unknown email",
+    });
     return NextResponse.json({ ok: true, message: GENERIC_OK_MESSAGE });
   }
 
@@ -104,22 +109,46 @@ export async function POST(request: Request) {
   const expiresAt = new Date(now.getTime() + PASSWORD_RESET_TTL_MS);
   const resetUrl = buildResetUrl(rawToken);
 
-  await db
-    .delete(passwordResetTokens)
-    .where(eq(passwordResetTokens.userId, user.id));
+  try {
+    await db
+      .delete(passwordResetTokens)
+      .where(eq(passwordResetTokens.userId, user.id));
 
-  await db.insert(passwordResetTokens).values({
-    id: createId("prt"),
-    userId: user.id,
-    tokenHash,
-    expiresAt,
-    createdAt: now,
-  });
+    await db.insert(passwordResetTokens).values({
+      id: createId("prt"),
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+      createdAt: now,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    logError({
+      event: "forgot_password.failed",
+      userId: user.id,
+      message,
+      code: "FORGOT_PASSWORD_FAILED",
+    });
+    return NextResponse.json(
+      { error: "Request failed", code: "FORGOT_PASSWORD_FAILED" },
+      { status: 500 },
+    );
+  }
 
   const wasEmailSent = await trySendResetEmail(user.email, resetUrl);
 
   if (!wasEmailSent) {
-    console.info(`[password-reset] Reset URL for ${user.email}: ${resetUrl}`);
+    logInfo({
+      event: "forgot_password.reset_url_dev",
+      userId: user.id,
+      message: `Reset URL (email not sent): ${resetUrl}`,
+    });
+  } else {
+    logInfo({
+      event: "forgot_password.email_sent",
+      userId: user.id,
+      message: "Password reset email sent",
+    });
   }
 
   const payload: {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db";
+import { logError } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,11 @@ export async function GET() {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Database check failed";
-    console.error("[health]", message);
+    logError({
+      event: "health.db_failed",
+      message,
+      code: "DATABASE_CHECK_FAILED",
+    });
     return NextResponse.json(
       {
         ok: false,

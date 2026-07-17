@@ -1,4 +1,5 @@
 import { getDay, parseISO } from "date-fns";
+import { isRunningInNativeApp } from "./device";
 import { getPayWeekBounds } from "./dates";
 import { isActive } from "./entity-lifecycle";
 import type { Transaction, Weekday } from "./types";
@@ -12,6 +13,19 @@ const WEEKDAY_TO_NUMBER: Record<Weekday, number> = {
   viernes: 5,
   sabado: 6,
 };
+
+/** Capacitor LocalNotifications Weekday: Sunday=1 … Saturday=7 */
+const WEEKDAY_TO_CAPACITOR: Record<Weekday, number> = {
+  domingo: 1,
+  lunes: 2,
+  martes: 3,
+  miercoles: 4,
+  jueves: 5,
+  viernes: 6,
+  sabado: 7,
+};
+
+export const PAYDAY_NATIVE_NOTIFICATION_ID = 42_001;
 
 export function isPaydayDate(
   referenceDate: Date,
@@ -81,5 +95,77 @@ export function maybeNotifyPaydayLoad(options?: {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Request local-notification permission on Capacitor (E3).
+ * Returns true when granted (or already granted).
+ */
+export async function requestNativePaydayPermission(): Promise<boolean> {
+  if (!isRunningInNativeApp()) return false;
+  try {
+    const { LocalNotifications } = await import(
+      "@capacitor/local-notifications"
+    );
+    const current = await LocalNotifications.checkPermissions();
+    if (current.display === "granted") return true;
+    const requested = await LocalNotifications.requestPermissions();
+    return requested.display === "granted";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Schedule a weekly native reminder on the user's payday at 09:00 (E3).
+ * Cancels the previous schedule first. No-op on web.
+ */
+export async function syncNativePaydayNotification(
+  paydayWeekday: Weekday,
+  shouldRemind: boolean,
+): Promise<void> {
+  if (!isRunningInNativeApp()) return;
+
+  try {
+    const { LocalNotifications } = await import(
+      "@capacitor/local-notifications"
+    );
+
+    await LocalNotifications.cancel({
+      notifications: [{ id: PAYDAY_NATIVE_NOTIFICATION_ID }],
+    });
+
+    if (!shouldRemind) return;
+
+    const permission = await LocalNotifications.checkPermissions();
+    if (permission.display !== "granted") {
+      const requested = await LocalNotifications.requestPermissions();
+      if (requested.display !== "granted") return;
+    }
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: PAYDAY_NATIVE_NOTIFICATION_ID,
+          title: PAYDAY_NOTIFICATION_TITLE,
+          body: PAYDAY_NOTIFICATION_BODY,
+          schedule: {
+            on: {
+              weekday: WEEKDAY_TO_CAPACITOR[paydayWeekday],
+              hour: 9,
+              minute: 0,
+            },
+            allowWhileIdle: true,
+          },
+          extra: {
+            deepLink: "rinde://income",
+            openIncome: true,
+          },
+        },
+      ],
+    });
+  } catch {
+    /* plugin unavailable — keep in-app banner / web notifications */
   }
 }

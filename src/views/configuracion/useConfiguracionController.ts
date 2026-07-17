@@ -2,11 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { downloadJsonFile, parseFinanceBackup } from "@/lib/backup";
-import { parseTransactionsCsv } from "@/lib/csv-io";
+import {
+  disableBiometricUnlock,
+  enableBiometricUnlock,
+  isBiometricHardwareAvailable,
+  isBiometricUnlockEnabled,
+} from "@/lib/biometric-unlock";
+import { parseTransactionsCsv, buildTransactionsCsv } from "@/lib/csv-io";
+import { isRunningInNativeApp } from "@/lib/device";
 import { isActive } from "@/lib/entity-lifecycle";
 import { todayIso } from "@/lib/dates";
 import type { CurrencyCode } from "@/lib/format";
 import { METHOD_LABELS, parseMoneyInput } from "@/lib/format";
+import {
+  requestNativePaydayPermission,
+  syncNativePaydayNotification,
+} from "@/lib/payday-reminder";
 import {
   disablePinWithVerification,
   isPinEnabled,
@@ -16,11 +27,6 @@ import {
 } from "@/lib/pin-lock";
 import { initialsFromName } from "@/lib/profile-setup";
 import { touchFinancePersist, useFinanceStore } from "@/store/finance-store";
-
-function escapeCsv(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
 
 export type ConfigConfirmPending =
   | { kind: "restore" }
@@ -58,6 +64,9 @@ export function useConfiguracionController() {
   const [pinMessage, setPinMessage] = useState("");
   const [pinError, setPinError] = useState("");
   const [isSavingPin, setIsSavingPin] = useState(false);
+  const [canUseBiometric, setCanUseBiometric] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [isTogglingBiometric, setIsTogglingBiometric] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | "unsupported"
   >("unsupported");
@@ -100,11 +109,38 @@ export function useConfiguracionController() {
   useEffect(() => {
     if (!hydrated) return;
     setPinEnabled(isPinEnabled());
+    let isCancelled = false;
+    async function refreshBiometric() {
+      if (!isRunningInNativeApp()) return;
+      const [isAvailable, isEnabled] = await Promise.all([
+        isBiometricHardwareAvailable(),
+        isBiometricUnlockEnabled(),
+      ]);
+      if (isCancelled) return;
+      setCanUseBiometric(isAvailable);
+      setBiometricEnabled(isEnabled);
+    }
+    void refreshBiometric();
+    return () => {
+      isCancelled = true;
+    };
   }, [hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    void syncNativePaydayNotification(
+      profile.paydayWeekday,
+      Boolean(profile.shouldRemindPaydayLoad),
+    );
+  }, [hydrated, profile.paydayWeekday, profile.shouldRemindPaydayLoad]);
+
+  useEffect(() => {
     if (typeof Notification === "undefined") {
-      setNotificationPermission("unsupported");
+      if (isRunningInNativeApp()) {
+        setNotificationPermission("default");
+      } else {
+        setNotificationPermission("unsupported");
+      }
       return;
     }
     setNotificationPermission(Notification.permission);
@@ -135,41 +171,12 @@ export function useConfiguracionController() {
   function handleExportCsv() {
     const categoryById = new Map(categories.map((c) => [c.id, c.name]));
     const sourceById = new Map(incomeSources.map((s) => [s.id, s.name]));
-    const header = [
-      "fecha",
-      "tipo",
-      "titulo",
-      "monto",
-      "moneda",
-      "metodo",
-      "categoria",
-      "fuente",
-      "nota",
-      "mes",
-      "semana",
-    ];
-    const rows = [...transactions]
-      .filter(isActive)
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .map((tx) =>
-        [
-          tx.date,
-          tx.type,
-          tx.title,
-          String(tx.amount),
-          tx.currency,
-          METHOD_LABELS[tx.method] ?? tx.method,
-          tx.categoryId ? (categoryById.get(tx.categoryId) ?? "") : "",
-          tx.incomeSourceId ? (sourceById.get(tx.incomeSourceId) ?? "") : "",
-          tx.note,
-          tx.month,
-          tx.weekIso,
-        ]
-          .map(escapeCsv)
-          .join(","),
-      );
-
-    const csv = [header.join(","), ...rows].join("\n");
+    const csv = buildTransactionsCsv(
+      transactions,
+      categoryById,
+      sourceById,
+      METHOD_LABELS,
+    );
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -382,6 +389,8 @@ export function useConfiguracionController() {
       setPinError("PIN actual incorrecto.");
       return;
     }
+    await disableBiometricUnlock();
+    setBiometricEnabled(false);
     // Session key cleared — next persist write stores plaintext.
     touchFinancePersist();
     setPinEnabled(false);
@@ -391,16 +400,59 @@ export function useConfiguracionController() {
     setPinMessage("PIN desactivado.");
   }
 
+  async function handleToggleBiometric(nextEnabled: boolean) {
+    setPinError("");
+    setPinMessage("");
+    if (!pinEnabled) {
+      setPinError("Activá un PIN antes de usar biometría.");
+      return;
+    }
+    setIsTogglingBiometric(true);
+    try {
+      if (!nextEnabled) {
+        await disableBiometricUnlock();
+        setBiometricEnabled(false);
+        setPinMessage("Biometría desactivada.");
+        return;
+      }
+      if (!isValidPinFormat(currentPin)) {
+        setPinError("Ingresá el PIN actual para activar biometría.");
+        return;
+      }
+      const isCurrentValid = await verifyPin(currentPin);
+      if (!isCurrentValid) {
+        setPinError("PIN actual incorrecto.");
+        return;
+      }
+      const didEnable = await enableBiometricUnlock(currentPin);
+      if (!didEnable) {
+        setPinError("No se pudo activar biometría en este dispositivo.");
+        return;
+      }
+      setBiometricEnabled(true);
+      setCurrentPin("");
+      setPinMessage("Biometría activada. Podés desbloquear sin tipear el PIN.");
+    } finally {
+      setIsTogglingBiometric(false);
+    }
+  }
+
   async function handleTogglePaydayReminder(nextEnabled: boolean) {
-    if (nextEnabled && typeof Notification !== "undefined") {
-      if (Notification.permission === "default") {
-        const permission = await Notification.requestPermission();
-        setNotificationPermission(permission);
-      } else {
-        setNotificationPermission(Notification.permission);
+    if (nextEnabled) {
+      if (isRunningInNativeApp()) {
+        const granted = await requestNativePaydayPermission();
+        setNotificationPermission(granted ? "granted" : "denied");
+      } else if (typeof Notification !== "undefined") {
+        if (Notification.permission === "default") {
+          const permission = await Notification.requestPermission();
+          setNotificationPermission(permission);
+        } else {
+          setNotificationPermission(Notification.permission);
+        }
       }
     }
     updateProfile({ shouldRemindPaydayLoad: nextEnabled });
+    await syncNativePaydayNotification(profile.paydayWeekday, nextEnabled);
   }
 
   return {
@@ -422,6 +474,9 @@ export function useConfiguracionController() {
     pinMessage,
     pinError,
     isSavingPin,
+    canUseBiometric,
+    biometricEnabled,
+    isTogglingBiometric,
     notificationPermission,
     importMessage,
     newAccountName,
@@ -455,6 +510,7 @@ export function useConfiguracionController() {
     cancelConfirm,
     handleSavePin,
     handleDisablePin,
+    handleToggleBiometric,
     handleTogglePaydayReminder,
   };
 }

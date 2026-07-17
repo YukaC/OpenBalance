@@ -4,6 +4,7 @@
 /node_modules
 /.pnp
 .pnp.*
+.pnpm-store/
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
@@ -12,6 +13,13 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# pdf.js worker (copied on prepare/postinstall)
+/public/pdf.worker.min.mjs
 
 # next.js
 /.next/

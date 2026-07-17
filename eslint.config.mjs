@@ -10,6 +10,7 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // next/core-web-vitals includes eslint-plugin-jsx-a11y — do not disable those rules.
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     ignores: [
@@ -18,6 +19,10 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "public/pdf.worker.min.mjs",
+      ".pnpm-store/**",
+      "playwright-report/**",
+      "test-results/**",
     ],
   },
 ];

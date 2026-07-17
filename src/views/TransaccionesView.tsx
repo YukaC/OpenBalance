@@ -1,8 +1,9 @@
 "use client";
 
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { endOfMonth, format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MonthNavigator } from "@/components/MonthNavigator";
 import { TransactionRow } from "@/components/TransactionRow";
@@ -32,6 +33,9 @@ interface ActiveFilterChip {
 }
 
 const PAGE_SIZE = 40;
+/** Switch from "Mostrar más" pagination to virtual scroll above this count. */
+const VIRTUALIZE_THRESHOLD = 80;
+const ESTIMATED_ROW_HEIGHT = 72;
 
 const TYPE_FILTERS: { value: TypeFilter; label: string }[] = [
   { value: "all", label: "Todos" },
@@ -76,6 +80,7 @@ export default function TransaccionesView() {
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
   const defaultCurrency = useFinanceStore((s) => s.profile.defaultCurrency);
+  const accounts = useFinanceStore((s) => s.accounts);
   const openForm = useFinanceStore((s) => s.openForm);
   const openFormForEdit = useFinanceStore((s) => s.openFormForEdit);
   const deleteTransaction = useFinanceStore((s) => s.deleteTransaction);
@@ -90,6 +95,7 @@ export default function TransaccionesView() {
   const [methodFilter, setMethodFilter] = useState<"all" | PaymentMethod>(
     "all",
   );
+  const [accountFilter, setAccountFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [dateSortOrder, setDateSortOrder] = useState<"desc" | "asc">("desc");
@@ -98,6 +104,7 @@ export default function TransaccionesView() {
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
+  const listScrollRef = useRef<HTMLDivElement>(null);
 
   const monthBounds = useMemo(() => {
     const monthStart = parseMonthKey(selectedMonth);
@@ -122,6 +129,7 @@ export default function TransaccionesView() {
     categoryFilter !== "all" ||
     motivoFilter !== "all" ||
     methodFilter !== "all" ||
+    accountFilter !== "all" ||
     dateFrom !== "" ||
     dateTo !== "";
 
@@ -134,12 +142,14 @@ export default function TransaccionesView() {
     (dateFrom || dateTo ? 1 : 0) +
     (categoryFilter !== "all" ? 1 : 0) +
     (motivoFilter !== "all" ? 1 : 0) +
-    (methodFilter !== "all" ? 1 : 0);
+    (methodFilter !== "all" ? 1 : 0) +
+    (accountFilter !== "all" ? 1 : 0);
 
   function clearAdvancedFilters() {
     setCategoryFilter("all");
     setMotivoFilter("all");
     setMethodFilter("all");
+    setAccountFilter("all");
     setDateFrom("");
     setDateTo("");
   }
@@ -159,6 +169,7 @@ export default function TransaccionesView() {
     setCategoryFilter("all");
     setMotivoFilter("all");
     setMethodFilter("all");
+    setAccountFilter("all");
     setSearchQuery("");
     setDebouncedSearchQuery("");
     setTypeFilter("all");
@@ -195,6 +206,11 @@ export default function TransaccionesView() {
       .filter((tx) => {
         if (methodFilter === "all") return true;
         return tx.method === methodFilter;
+      })
+      .filter((tx) => {
+        if (accountFilter === "all") return true;
+        if (accountFilter === "none") return !tx.accountId;
+        return tx.accountId === accountFilter;
       })
       .filter((tx) => {
         if (categoryFilter === "all" || typeFilter === "ingreso") return true;
@@ -239,6 +255,7 @@ export default function TransaccionesView() {
     categoryFilter,
     motivoFilter,
     methodFilter,
+    accountFilter,
     dateFrom,
     dateTo,
     dateSortOrder,
@@ -262,6 +279,7 @@ export default function TransaccionesView() {
     categoryFilter,
     motivoFilter,
     methodFilter,
+    accountFilter,
     dateFrom,
     dateTo,
     dateSortOrder,
@@ -270,8 +288,24 @@ export default function TransaccionesView() {
 
   const visibleTransactions = filtered.slice(0, visibleCount);
   const remainingCount = filtered.length - visibleCount;
+  const shouldVirtualize = filtered.length > VIRTUALIZE_THRESHOLD;
   const showCategoryFilter = typeFilter === "all" || typeFilter === "gasto";
   const showMotivoFilter = typeFilter === "all" || typeFilter === "ingreso";
+
+  const rowVirtualizer = useVirtualizer({
+    count: shouldVirtualize ? filtered.length : 0,
+    getScrollElement: () => listScrollRef.current,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    overscan: 10,
+  });
+  const activeAccounts = useMemo(
+    () => accounts.filter(isActive),
+    [accounts],
+  );
+  const accountsById = useMemo(
+    () => new Map(activeAccounts.map((account) => [account.id, account])),
+    [activeAccounts],
+  );
 
   const activeFilterChips = useMemo(() => {
     const chips: ActiveFilterChip[] = [];
@@ -317,6 +351,18 @@ export default function TransaccionesView() {
       });
     }
 
+    if (accountFilter !== "all") {
+      const accountLabel =
+        accountFilter === "none"
+          ? "Sin cuenta"
+          : (accountsById.get(accountFilter)?.name ?? "Cuenta");
+      chips.push({
+        id: "account",
+        label: accountLabel,
+        onClear: () => setAccountFilter("all"),
+      });
+    }
+
     return chips;
   }, [
     dateFrom,
@@ -324,10 +370,12 @@ export default function TransaccionesView() {
     categoryFilter,
     motivoFilter,
     methodFilter,
+    accountFilter,
     showCategoryFilter,
     showMotivoFilter,
     categoriesById,
     incomeSourcesById,
+    accountsById,
   ]);
 
   function performDelete(
@@ -662,6 +710,28 @@ export default function TransaccionesView() {
                 </select>
               </label>
 
+              {activeAccounts.length > 0 ? (
+                <label className="flex flex-col gap-1 text-left">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--ink-faint)]">
+                    Cuenta
+                  </span>
+                  <select
+                    value={accountFilter}
+                    onChange={(e) => setAccountFilter(e.target.value)}
+                    aria-label="Filtrar por cuenta"
+                    className={FIELD_CLASS}
+                  >
+                    <option value="all">Todas</option>
+                    <option value="none">Sin cuenta</option>
+                    {activeAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name} ({account.currency})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
               {hasAdvancedFilters ? (
                 <div className="flex justify-end pt-0.5">
                   <button
@@ -707,8 +777,66 @@ export default function TransaccionesView() {
               </button>
             )}
           </div>
+        ) : shouldVirtualize ? (
+          <div
+            ref={listScrollRef}
+            className="max-h-[min(70vh,36rem)] overflow-y-auto overscroll-contain"
+            role="list"
+            aria-label={`Lista virtualizada de ${filtered.length} movimientos`}
+          >
+            <div
+              className="relative w-full"
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const tx = filtered[virtualRow.index];
+                const category = tx.categoryId
+                  ? categoriesById.get(tx.categoryId)
+                  : undefined;
+                const incomeSource = tx.incomeSourceId
+                  ? incomeSourcesById.get(tx.incomeSourceId)
+                  : undefined;
+                return (
+                  <div
+                    key={tx.id}
+                    role="listitem"
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    className="absolute top-0 left-0 w-full"
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <div className="row-contain flex items-stretch gap-1">
+                      <div className="min-w-0 flex-1">
+                        <TransactionRow
+                          transaction={tx}
+                          category={category}
+                          incomeSourceName={incomeSource?.name}
+                          onSelect={() => openFormForEdit(tx.id)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Eliminar ${tx.title}`}
+                        onClick={() =>
+                          setPendingDelete({
+                            transaction: tx,
+                            step: "confirm",
+                          })
+                        }
+                        className={`mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[20px] text-[var(--ink-faint)] transition-soft hover:bg-[var(--red-soft)] hover:text-[var(--red)] ${FOCUS_RING}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         ) : (
-          <div>
+          <div role="list" aria-label="Lista de movimientos">
             {visibleTransactions.map((tx, index) => {
               const category = tx.categoryId
                 ? categoriesById.get(tx.categoryId)
@@ -719,6 +847,7 @@ export default function TransaccionesView() {
               return (
                 <div
                   key={`${tx.id}-${index}`}
+                  role="listitem"
                   className="row-contain flex items-stretch gap-1"
                 >
                   <div className="min-w-0 flex-1">

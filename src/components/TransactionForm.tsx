@@ -9,6 +9,7 @@ import { isActive } from "@/lib/entity-lifecycle";
 import { detectRecurringIncomeHint } from "@/lib/recurring-income";
 import type { PaymentMethod, TransactionType } from "@/lib/types";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { hapticSuccess } from "@/lib/native-haptics";
 import { useFinanceStore } from "@/store/finance-store";
 import { useToastStore } from "@/store/toast-store";
 
@@ -317,6 +318,7 @@ export function TransactionForm() {
       });
     }
     showToast({ message: "Movimiento guardado", durationMs: 2500 });
+    void hapticSuccess();
     requestClose();
   }
 

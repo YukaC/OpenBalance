@@ -11,20 +11,37 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./scripts/ts-resolve.mjs --import ./scripts/test-setup.mjs --experimental-strip-types --test src/lib/*.test.ts src/store/*.test.ts",
+    "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "prepare": "husky && node scripts/copy-pdf-worker.mjs"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --max-warnings=0"
+    ]
   },
   "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@capacitor/android": "^8.4.2",
+    "@capacitor/app": "^8.1.1",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/core": "^8.4.2",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.4.2",
+    "@capacitor/local-notifications": "^8.2.1",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@tanstack/react-virtual": "^3.14.6",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "next": "15.5.20",
     "next-auth": "^5.0.0-beta.31",
+    "pdfjs-dist": "^6.1.200",
     "postgres": "^3.4.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -32,14 +49,18 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "axe-core": "^4.12.1",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "15.5.20",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

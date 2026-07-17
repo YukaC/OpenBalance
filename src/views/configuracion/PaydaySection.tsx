@@ -55,7 +55,7 @@ export function PaydaySection({
       <CollapsibleLedgerSection
         headingId="reminders-heading"
         title="Recordatorios"
-        lede="Si abrís Rinde el día de cobro y todavía no cargaste el ingreso de la semana, te mostramos un aviso. Con permiso del navegador también podés recibir una notificación."
+        lede="Si abrís Rinde el día de cobro y todavía no cargaste el ingreso de la semana, te mostramos un aviso. En la app nativa también programamos una notificación local; en el navegador pedimos permiso de Web Notifications."
       >
         <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-[var(--line)] bg-[var(--bg)] px-3.5 py-3">
           <input
@@ -72,9 +72,9 @@ export function PaydaySection({
             </span>
             <span className="mt-0.5 block text-[12.5px] text-[var(--ink-soft)]">
               {notificationPermission === "granted"
-                ? "Notificaciones del navegador activas."
+                ? "Notificaciones activas (web o nativas)."
                 : notificationPermission === "denied"
-                  ? "El navegador bloqueó notificaciones; el aviso en la app sigue disponible."
+                  ? "Permiso denegado; el aviso en la app sigue disponible."
                   : "Al activarlo podemos pedir permiso de notificación."}
             </span>
           </span>

@@ -11,7 +11,8 @@ cp .env.example .env.local
 
 openssl rand -base64 32   # paste into AUTH_SECRET
 
-npm run db:push           # local/dev only — creates tables in Neon (reads .env.local via drizzle.config.ts)
+# Local/empty DB only — never against production data:
+npm run db:push
 npm run dev
 ```
 
@@ -33,17 +34,38 @@ Without `DATABASE_URL`, `/api/auth/register` and `/api/sync` return **503** JSON
 
 Do **not** turn on Neon Auth — login lives in this repo (`src/lib/auth.ts`).
 
-### Schema commands
+### Schema / migrations (H10)
+
+SQL migrations live under `./drizzle` (generated from `src/db/schema.ts`). Commit those files to git.
 
 | Script | When |
 |--------|------|
-| `npm run db:push` | **Local / empty DB only** — fast prototype sync; do not use against production data |
-| `npm run db:generate` | Generate SQL under `./drizzle` from `src/db/schema.ts` |
-| `npm run db:migrate` | Apply generated migrations — **use this in production** (review SQL first) |
+| `npm run db:generate` | **Always** after changing `src/db/schema.ts` — writes SQL + meta under `./drizzle`. Safe: does **not** touch any database. |
+| `npm run db:migrate` | Apply pending SQL to the DB pointed by `DATABASE_URL`. Review the SQL first. Use for **production** (and shared staging). |
+| `npm run db:push` | **Local / empty DB only** — pushes schema without migration history. Can propose destructive diffs; **do not run against production data**. |
 
-Production schema changes: `db:generate` → review the SQL → `db:migrate`. Reserve `db:push` for local/dev (it can propose destructive diffs).
+**Production workflow (never skip review):**
+
+```bash
+# 1) From a machine with .env.local (or DATABASE_URL set) — generate only:
+npm run db:generate
+# 2) Open ./drizzle/*.sql, review CREATE/ALTER carefully
+# 3) Apply against the target DB (prod URL only when you intend to migrate prod):
+DATABASE_URL="postgresql://…" npm run db:migrate
+```
+
+Do **not** run `db:migrate` or `db:push` casually against the production Neon URL from CI or chat agents. Generate locally; migrate intentionally.
+
+If `./drizzle` is empty or meta is missing after a schema change, run `npm run db:generate` (requires `DATABASE_URL` in `.env.local` for drizzle-kit config, but generate does not apply SQL).
 
 `drizzle.config.ts` loads `.env` then `.env.local` (drizzle-kit does not do this by itself).
+
+### Password reset table
+
+Forgot-password uses `password_reset_tokens`. After pulling schema changes:
+
+- Prefer: `db:generate` → review → `db:migrate`
+- Empty local DB only: `db:push`
 
 ## 2. GitHub → Vercel
 
@@ -78,17 +100,7 @@ Forgot-password always creates a hashed token in Postgres (`password_reset_token
 - **Dev / no SMTP:** the server logs the reset URL and (when `NODE_ENV !== "production"` or `AUTH_DEV_RESET_URL=1`) returns `{ ok: true, resetUrl }` so you can open the link locally.
 - **Production without `RESEND_API_KEY`:** token is still created; the API returns a generic message only. Configure Resend (or wire SMTP later) before relying on email delivery in prod.
 
-After adding the table, run `npm run db:push` (or generate/migrate) so Neon has `password_reset_tokens`.
-
 Same Neon DB as local is fine for early MVP. Separate prod branch/DB is better later.
-
-If the Vercel DB is **new**, prefer migrate from your machine (or use `db:push` only when the DB is empty and you accept the risk):
-
-```bash
-DATABASE_URL="postgresql://..." npm run db:generate
-DATABASE_URL="postgresql://..." npm run db:migrate
-# empty/local only: DATABASE_URL="postgresql://..." npm run db:push
-```
 
 ## 4. Production smoke check
 
@@ -96,11 +108,22 @@ DATABASE_URL="postgresql://..." npm run db:migrate
 2. Add a transaction → Configuración → **Sincronizar ahora**.
 3. Second browser / device → same account → sync → data appears.
 
+### Leave-sync smoke (A2)
+
+Dirty-only flush on tab hide / page leave (`visibilitychange` / `pagehide` + `keepalive`). Verify after deploy:
+
+1. Sign in on desktop Chrome → add or edit a transaction (chip should show **Pendiente**).
+2. Switch to another tab or minimize the window (do **not** press “Sincronizar ahora”).
+3. Wait ~1–2s → return → chip should show **Sincronizado** (or check Network: `POST /api/sync` with `keepalive`).
+4. Repeat on mobile web (Safari/Chrome): edit → switch apps / lock screen briefly → reopen → data still pending or already synced; second device pull confirms cloud has the edit.
+5. Negative check: with **no** local edits, hide the tab → no sync request (or no-op / empty dirty payload).
+
 ## 5. CI
 
-`.github/workflows/ci.yml` runs test, typecheck, lint, and build **without** a real database. Build must succeed with unset `DATABASE_URL` (lazy DB client).
+`.github/workflows/ci.yml` runs test, typecheck, lint, and build **without** a real database. Build must succeed with unset `DATABASE_URL` (lazy DB client). CI does **not** run `db:migrate` / `db:push`.
 
 ## Related
 
 - [MOBILE.md](./MOBILE.md) — Capacitor / static export
+- [A11Y.md](./A11Y.md) — checklist liviana de accesibilidad
 - [../README.md](../README.md) — product overview + scripts

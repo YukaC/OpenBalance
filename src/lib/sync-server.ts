@@ -95,6 +95,7 @@ function mapProfile(row: ProfileRow): SyncProfile {
     defaultAccountId: row.defaultAccountId ?? undefined,
     shouldRemindPaydayLoad: row.shouldRemindPaydayLoad,
     monthlySavingsGoal: row.monthlySavingsGoal ?? undefined,
+    manualExchangeRate: row.manualExchangeRate ?? undefined,
     updatedAt: row.updatedAt.toISOString(),
     deletedAt: toIso(row.deletedAt),
   };
@@ -150,6 +151,8 @@ function mapUserRule(row: UserRuleRow): SyncUserRule {
     id: row.id,
     pattern: row.pattern,
     categoryId: row.categoryId,
+    priority: row.priority,
+    confirmCount: row.confirmCount,
     updatedAt: row.updatedAt.toISOString(),
     deletedAt: toIso(row.deletedAt),
   };
@@ -216,6 +219,10 @@ async function upsertProfile(
     monthlySavingsGoal:
       profile.monthlySavingsGoal != null && profile.monthlySavingsGoal > 0
         ? profile.monthlySavingsGoal
+        : null,
+    manualExchangeRate:
+      profile.manualExchangeRate != null && profile.manualExchangeRate > 0
+        ? profile.manualExchangeRate
         : null,
     updatedAt,
     deletedAt,
@@ -413,6 +420,8 @@ async function upsertUserRule(
     userId,
     pattern: rule.pattern,
     categoryId: rule.categoryId,
+    priority: rule.priority ?? 0,
+    confirmCount: Math.max(1, rule.confirmCount ?? 1),
     updatedAt,
     deletedAt,
   };

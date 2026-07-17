@@ -7,6 +7,7 @@ import {
   isValidEmail,
   isValidPassword,
 } from "@/lib/auth-password";
+import { logError, logInfo } from "@/lib/logger";
 import {
   consumeRateLimit,
   getClientIp,
@@ -111,36 +112,56 @@ export async function POST(request: Request) {
   const passwordHash = await hashPassword(password);
   const now = new Date();
 
-  await db.insert(users).values({
-    id: userId,
-    email,
-    passwordHash,
-    name,
-    createdAt: now,
-  });
+  try {
+    await db.insert(users).values({
+      id: userId,
+      email,
+      passwordHash,
+      name,
+      createdAt: now,
+    });
 
-  await db.insert(accounts).values({
-    id: accountId,
-    userId,
-    name: "Principal",
-    currency: "ARS",
-    updatedAt: now,
-    deletedAt: null,
-  });
+    await db.insert(accounts).values({
+      id: accountId,
+      userId,
+      name: "Principal",
+      currency: "ARS",
+      updatedAt: now,
+      deletedAt: null,
+    });
 
-  await db.insert(profiles).values({
+    await db.insert(profiles).values({
+      userId,
+      clientId: userId,
+      name,
+      email,
+      defaultCurrency: "ARS",
+      paydayWeekday: "viernes",
+      initials: initialsFromName(name),
+      isSetupComplete: false,
+      defaultAccountId: accountId,
+      shouldRemindPaydayLoad: false,
+      updatedAt: now,
+      deletedAt: null,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    logError({
+      event: "register.failed",
+      userId,
+      message,
+      code: "REGISTER_FAILED",
+    });
+    return NextResponse.json(
+      { error: "Registration failed", code: "REGISTER_FAILED" },
+      { status: 500 },
+    );
+  }
+
+  logInfo({
+    event: "register.ok",
     userId,
-    clientId: userId,
-    name,
-    email,
-    defaultCurrency: "ARS",
-    paydayWeekday: "viernes",
-    initials: initialsFromName(name),
-    isSetupComplete: false,
-    defaultAccountId: accountId,
-    shouldRemindPaydayLoad: false,
-    updatedAt: now,
-    deletedAt: null,
+    message: "User registered",
   });
 
   return NextResponse.json(

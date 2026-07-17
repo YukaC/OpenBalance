@@ -44,6 +44,11 @@ export interface UserProfile extends SyncLifecycle {
   shouldRemindPaydayLoad: boolean;
   /** Optional monthly savings target (same unit as defaultCurrency). */
   monthlySavingsGoal?: number | null;
+  /**
+   * Manual FX: ARS per 1 USD. Used only for optional "equivalent in default
+   * currency" displays — never fetched from an external API.
+   */
+  manualExchangeRate?: number | null;
 }
 
 export interface Account extends SyncLifecycle {
@@ -128,4 +133,11 @@ export interface UserCategoryRule extends SyncLifecycle {
   id: string;
   pattern: string;
   categoryId: string;
+  /**
+   * Higher wins among overlapping user rules (G1). Confirmed corrections
+   * (same pattern→category ≥2×) get elevated priority.
+   */
+  priority?: number;
+  /** Times the user confirmed this pattern→categoryId correction. */
+  confirmCount?: number;
 }

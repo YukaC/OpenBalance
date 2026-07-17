@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDb, isDatabaseConfigured } from "@/db";
-import { auth } from "@/lib/auth";
 import {
   consumeRateLimit,
   getClientIp,
   RATE_LIMIT_WINDOW_MS,
   SYNC_RATE_LIMIT,
 } from "@/lib/rate-limit";
+import { logError, logInfo } from "@/lib/logger";
+import { resolveRequestUserId } from "@/lib/resolve-request-user";
 import {
   runSync,
   type SyncChanges,
@@ -70,8 +71,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await resolveRequestUserId(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -125,6 +125,11 @@ export async function POST(request: Request) {
   try {
     const db = getDb();
     const result = await runSync(db, userId, body);
+    logInfo({
+      event: "sync.ok",
+      userId,
+      message: "Sync completed",
+    });
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
@@ -132,11 +137,12 @@ export async function POST(request: Request) {
       error instanceof Error && "code" in error && typeof error.code === "string"
         ? error.code
         : undefined;
-    console.error(
-      "[sync]",
-      code ? `${message} (${code})` : message,
-      `userId=${userId}`,
-    );
+    logError({
+      event: "sync.failed",
+      userId,
+      message,
+      code: code ?? "SYNC_FAILED",
+    });
     return NextResponse.json(
       { error: "Sync failed", code: "SYNC_FAILED" },
       { status: 500 },

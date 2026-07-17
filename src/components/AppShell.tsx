@@ -1,15 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { bindOverlayHistoryBack } from "@/lib/android-back";
+import {
+  bindNativeBackButton,
+  bindOverlayHistoryBack,
+} from "@/lib/android-back";
 import { CurrencyProvider } from "@/lib/currency-context";
 import { startAutoSync, stopAutoSync } from "@/lib/auto-sync";
 import { isAuthEnabled } from "@/lib/auth-flags";
+import { bindDeepLinkListeners } from "@/lib/deep-links";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { WEEKDAY_LABELS } from "@/lib/format";
+import {
+  NATIVE_AUTH_CHANGED_EVENT,
+  hasNativeAuthToken,
+} from "@/lib/native-auth";
+import { hapticLightImpact } from "@/lib/native-haptics";
+import { hideNativeSplash } from "@/lib/native-splash";
 import { isPinEnabled } from "@/lib/pin-lock";
 import { needsProfileSetup } from "@/lib/profile-setup";
 import {
@@ -212,6 +222,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
   );
   const [isPinUnlocked, setIsPinUnlocked] = useState(false);
   const [hasPinLock, setHasPinLock] = useState(false);
+  const [hasNativeSession, setHasNativeSession] = useState(false);
   const authEnabled = isAuthEnabled();
   const { data: session, status: sessionStatus } = useSession();
 
@@ -221,6 +232,23 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     if (typeof window !== "undefined" && window.location.pathname !== nextSection) {
       window.history.pushState(null, "", nextSection);
     }
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function refreshNativeSession() {
+      const hasToken = await hasNativeAuthToken();
+      if (!isCancelled) setHasNativeSession(hasToken);
+    }
+    void refreshNativeSession();
+    function onNativeAuthChanged() {
+      void refreshNativeSession();
+    }
+    window.addEventListener(NATIVE_AUTH_CHANGED_EVENT, onNativeAuthChanged);
+    return () => {
+      isCancelled = true;
+      window.removeEventListener(NATIVE_AUTH_CHANGED_EVENT, onNativeAuthChanged);
+    };
   }, []);
 
   useEffect(() => {
@@ -276,11 +304,54 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isFormOpen, closeForm]);
 
-  // Soft Android back: history entry while form is open (needs @capacitor/app for full backButton).
+  // Soft Android back: history entry while form is open.
   useEffect(
     () => bindOverlayHistoryBack(isFormOpen, closeForm),
     [isFormOpen, closeForm],
   );
+
+  // Capacitor hardware backButton (K2): form → home → exit.
+  const sectionRef = useRef(section);
+  const isFormOpenRef = useRef(isFormOpen);
+  sectionRef.current = section;
+  isFormOpenRef.current = isFormOpen;
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    void bindNativeBackButton({
+      isFormOpen: () => isFormOpenRef.current,
+      closeForm,
+      getSection: () => sectionRef.current,
+      navigateHome: () => navigateToSection("/"),
+    }).then((fn) => {
+      unsubscribe = fn;
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, [closeForm, navigateToSection]);
+
+  // Deep links + local-notification taps (K6 / E3).
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    void bindDeepLinkListeners((action) => {
+      if (action.type === "open-form") {
+        openForm(action.formType);
+      }
+    }).then((fn) => {
+      unsubscribe = fn;
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, [openForm]);
+
+  // Hide splash once the gate is past loading (K3).
+  useEffect(() => {
+    if (!hydrated) return;
+    if (authEnabled && sessionStatus === "loading" && !hasNativeSession) return;
+    void hideNativeSplash();
+  }, [hydrated, authEnabled, sessionStatus, hasNativeSession]);
 
   // Auto sync: immediately on login (with retries) + idle debounce after edits.
   useEffect(() => {
@@ -288,7 +359,9 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
       stopAutoSync();
       return;
     }
-    if (sessionStatus !== "authenticated") {
+    const isAuthenticated =
+      sessionStatus === "authenticated" || hasNativeSession;
+    if (!isAuthenticated) {
       stopAutoSync();
       return;
     }
@@ -302,6 +375,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     authEnabled,
     hydrated,
     sessionStatus,
+    hasNativeSession,
     session?.user?.id,
     session?.user?.email,
   ]);
@@ -312,10 +386,10 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
 
   // Cloud auth first when enabled — never show onboarding before register/login.
   if (authEnabled) {
-    if (sessionStatus === "loading") {
+    if (sessionStatus === "loading" && !hasNativeSession) {
       return <AppGateLoading />;
     }
-    if (sessionStatus === "unauthenticated") {
+    if (sessionStatus === "unauthenticated" && !hasNativeSession) {
       return <AuthScreen />;
     }
   }
@@ -527,7 +601,10 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
         {!isFormOpen ? (
           <button
             type="button"
-            onClick={() => openForm()}
+            onClick={() => {
+              void hapticLightImpact();
+              openForm();
+            }}
             aria-label="Nueva transacción"
             className="fab-button absolute z-50 flex h-[var(--fab-size)] w-[var(--fab-size)] items-center justify-center rounded-full bg-[var(--select)] text-[26px] leading-none text-[var(--chip-active-text)] shadow-[var(--shadow-fab)] transition-soft hover:scale-105 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] active:scale-95 max-[879px]:bottom-[calc(var(--nav-h)+16px)] max-[879px]:right-4 min-[880px]:bottom-8 min-[880px]:right-8"
           >

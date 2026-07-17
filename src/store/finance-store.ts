@@ -3,7 +3,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { BACKUP_VERSION, type FinanceBackupPayload } from "@/lib/backup";
-import { suggestCategoryId } from "@/lib/classifier";
+import {
+  suggestCategoryId,
+  applyCategoryCorrectionMemory,
+} from "@/lib/classifier";
 import { sanitizeCssColor } from "@/lib/color-utils";
 import {
   getAppToday,
@@ -798,25 +801,14 @@ export const useFinanceStore = create<FinanceState>()(
       rememberCategoryCorrection: (pattern, categoryId) => {
         const normalized = pattern.trim().toLowerCase();
         if (!normalized) return;
-        set((state) => {
-          const nowIso = new Date().toISOString();
-          const without = state.userRules.map((rule) =>
-            rule.pattern.toLowerCase() === normalized && isActive(rule)
-              ? touch({ ...rule, deletedAt: nowIso })
-              : rule,
-          );
-          return {
-            userRules: [
-              touch({
-                id: createId("rule"),
-                pattern: normalized,
-                categoryId,
-                deletedAt: null,
-              }),
-              ...without,
-            ],
-          };
-        });
+        set((state) => ({
+          userRules: applyCategoryCorrectionMemory(
+            state.userRules,
+            normalized,
+            categoryId,
+            () => createId("rule"),
+          ),
+        }));
       },
       suggestCategory: (text) =>
         suggestCategoryId(

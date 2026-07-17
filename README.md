@@ -31,10 +31,10 @@ npm run lint
 npm run typecheck
 npm test
 
-# Database (requires DATABASE_URL in .env.local)
-npm run db:push      # apply schema to Neon (dev)
-npm run db:generate  # SQL migrations under ./drizzle
-npm run db:migrate
+# Database (requires DATABASE_URL in .env.local) — see docs/DEPLOY.md
+npm run db:generate  # SQL under ./drizzle (safe; does not touch DB)
+npm run db:migrate   # apply migrations (review SQL first; intentional prod use)
+npm run db:push      # local/empty DB only — never against production data
 
 # Mobile
 npm run build:mobile
@@ -52,7 +52,7 @@ cp .env.example .env.local
 # DATABASE_URL (Neon pooled), AUTH_SECRET, AUTH_URL=http://localhost:3000
 # NEXT_PUBLIC_AUTH_ENABLED=true
 
-npm run db:push
+npm run db:push   # empty/local only; or db:generate && db:migrate
 npm run dev
 ```
 
@@ -78,6 +78,9 @@ Onboarding local en la primera visita. PIN opcional: deriva una clave local (PBK
 - [docs/DEPLOY.md](./docs/DEPLOY.md) — Neon, Auth.js, Vercel, env vars
 - [docs/MOBILE.md](./docs/MOBILE.md) — Capacitor / static export
 - [docs/IMPLEMENTATION-PLAN.md](./docs/IMPLEMENTATION-PLAN.md) — roadmap post auth/sync
+- [docs/A11Y.md](./docs/A11Y.md) — checklist liviana de accesibilidad
 - [AuditLogic.md](./AuditLogic.md) — auditoría de lógica de cálculo
 - [implementacion.md](./implementacion.md) — plan original
 - [analisis.md](./analisis.md) — análisis de producto
+
+**i18n (deuda consciente):** la UI está solo en español a propósito; no hay capa de traducciones. Agregar otro idioma no está en el roadmap cercano (ver J8 en el plan de implementación).

@@ -12,6 +12,7 @@ export const LOGIN_FAILED_RATE_LIMIT = 10;
 export const FORGOT_PASSWORD_RATE_LIMIT = 5;
 export const RESET_PASSWORD_RATE_LIMIT = 10;
 export const CHANGE_PASSWORD_RATE_LIMIT = 10;
+export const CHANGE_EMAIL_RATE_LIMIT = 10;
 
 export type RateLimitResult = {
   isAllowed: boolean;

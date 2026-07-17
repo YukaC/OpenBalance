@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isValidPinFormat, verifyPin } from "@/lib/pin-lock";
+import {
+  isBiometricHardwareAvailable,
+  isBiometricUnlockEnabled,
+  unlockWithBiometric,
+} from "@/lib/biometric-unlock";
+import { isRunningInNativeApp } from "@/lib/device";
+import { isValidPinFormat, unlockWithPin } from "@/lib/pin-lock";
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MS = 30_000;
@@ -13,6 +19,8 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [isChecking, setIsChecking] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutEndsAt, setLockoutEndsAt] = useState<number | null>(null);
+  const [canUseBiometric, setCanUseBiometric] = useState(false);
+  const [isBiometricChecking, setIsBiometricChecking] = useState(false);
 
   const isLocked =
     lockoutEndsAt !== null && Date.now() < lockoutEndsAt;
@@ -34,6 +42,48 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     return () => window.clearTimeout(timer);
   }, [lockoutEndsAt]);
 
+  useEffect(() => {
+    let isCancelled = false;
+    async function probeBiometric() {
+      if (!isRunningInNativeApp()) return;
+      const [isEnabled, isAvailable] = await Promise.all([
+        isBiometricUnlockEnabled(),
+        isBiometricHardwareAvailable(),
+      ]);
+      if (isCancelled) return;
+      setCanUseBiometric(isEnabled && isAvailable);
+      if (isEnabled && isAvailable) {
+        setIsBiometricChecking(true);
+        try {
+          const unlocked = await unlockWithBiometric();
+          if (!isCancelled && unlocked) onUnlocked();
+        } finally {
+          if (!isCancelled) setIsBiometricChecking(false);
+        }
+      }
+    }
+    void probeBiometric();
+    return () => {
+      isCancelled = true;
+    };
+  }, [onUnlocked]);
+
+  async function handleBiometricClick() {
+    if (isLocked || isBiometricChecking) return;
+    setIsBiometricChecking(true);
+    setErrorMessage("");
+    try {
+      const unlocked = await unlockWithBiometric();
+      if (unlocked) {
+        onUnlocked();
+        return;
+      }
+      setErrorMessage("No se pudo desbloquear con biometría. Usá el PIN.");
+    } finally {
+      setIsBiometricChecking(false);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (isLocked) return;
@@ -44,7 +94,7 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     setIsChecking(true);
     setErrorMessage("");
     try {
-      const isValid = await verifyPin(pin);
+      const isValid = await unlockWithPin(pin);
       if (!isValid) {
         const nextFailedAttempts = failedAttempts + 1;
         setFailedAttempts(nextFailedAttempts);
@@ -88,9 +138,22 @@ export function PinUnlockScreen({ onUnlocked }: { onUnlocked: () => void }) {
             Ingresá tu PIN local para continuar.
           </p>
           <p className="text-[12.5px] text-[var(--ink-faint)]">
-            Protege la apertura de la app; no cifra el almacenamiento.
+            El PIN cifra el almacenamiento local; nunca se envía al servidor.
           </p>
         </header>
+
+        {canUseBiometric ? (
+          <button
+            type="button"
+            onClick={() => void handleBiometricClick()}
+            disabled={isLocked || isBiometricChecking}
+            className="flex h-12 w-full items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[14px] font-bold text-[var(--ink)] transition-colors hover:bg-[var(--paper-deep)] disabled:opacity-50"
+          >
+            {isBiometricChecking
+              ? "Comprobando biometría…"
+              : "Desbloquear con huella / Face ID"}
+          </button>
+        ) : null}
 
         <label htmlFor="unlock-pin" className="flex flex-col gap-1.5">
           <span className="text-[12px] font-semibold text-[var(--ink-soft)]">

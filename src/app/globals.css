@@ -96,7 +96,8 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  --page-pad-x: 16px;
+  /* Include left/right insets for landscape notch / Dynamic Island (K5). */
+  --page-pad-x: max(16px, var(--safe-left), var(--safe-right));
   --page-pad-y: 16px;
 }
 
@@ -106,7 +107,7 @@
     --fab-size: 52px;
     --fab-clearance: calc(var(--nav-h) + var(--fab-size) + 24px);
     --list-max-h: none;
-    --page-pad-x: 16px;
+    --page-pad-x: max(16px, var(--safe-left), var(--safe-right));
     --page-pad-y: 16px;
   }
 }

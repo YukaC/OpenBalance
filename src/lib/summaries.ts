@@ -399,22 +399,40 @@ export function buildMonthSummary(
   currency?: "ARS" | "USD",
   /**
    * I1 light: optional prefiltered pay-week txs for this month.
-   * When provided, skips re-scanning the full ledger for category breakdown.
+   * When provided, skips re-scanning the full ledger for weeks + category breakdown.
    */
   prefilteredMonthTransactions?: Transaction[],
 ): MonthSummary {
+  const monthTx =
+    prefilteredMonthTransactions ??
+    filterByMonthPayWeeks(
+      transactions,
+      monthKey,
+      referenceToday,
+      paydayWeekday,
+      currency,
+    );
+
   const weeks = getMonthWorkWeeks(
     monthKey,
     referenceToday,
     paydayWeekday,
   ).map((week) => {
-    const weekTx = filterByPayWeek(
-      transactions,
-      week.start,
-      week.end,
-      currency,
-      paydayWeekday,
-    );
+    const weekTx = prefilteredMonthTransactions
+      ? monthTx.filter((item) => {
+          const date = parseISO(item.date);
+          return isWithinInterval(date, {
+            start: week.start,
+            end: week.end,
+          });
+        })
+      : filterByPayWeek(
+          transactions,
+          week.start,
+          week.end,
+          currency,
+          paydayWeekday,
+        );
     const weekIncome = sumByType(weekTx, "ingreso", currency);
     const weekExpense = sumByType(weekTx, "gasto", currency);
     return {
@@ -429,16 +447,6 @@ export function buildMonthSummary(
   const income = weeks.reduce((total, week) => total + week.income, 0);
   const expense = weeks.reduce((total, week) => total + week.expense, 0);
   const balance = income - expense;
-
-  const monthTx =
-    prefilteredMonthTransactions ??
-    filterByMonthPayWeeks(
-      transactions,
-      monthKey,
-      referenceToday,
-      paydayWeekday,
-      currency,
-    );
 
   const prevKey = previousMonthKey(monthKey);
   const prevTx = filterByMonthPayWeeks(
@@ -614,12 +622,15 @@ export function findCategorySpendAlerts(
   paydayWeekday: Weekday = "viernes",
   threshold = 0.2,
   currency?: "ARS" | "USD",
+  prefilteredMonthTransactions?: Transaction[],
 ): CategorySpendAlert[] {
   const currentByCategory = sumExpenseByCategory(
     transactions,
     monthKey,
     paydayWeekday,
     currency,
+    getAppToday(),
+    prefilteredMonthTransactions,
   );
   const previousByCategory = sumExpenseByCategory(
     transactions,
@@ -674,6 +685,7 @@ export function findBudgetAlerts(
   monthKey: string,
   paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
+  prefilteredMonthTransactions?: Transaction[],
 ): BudgetAlert[] {
   const monthBudgets = budgets.filter(
     (budget) => isActive(budget) && budget.month === monthKey,
@@ -685,6 +697,8 @@ export function findBudgetAlerts(
     monthKey,
     paydayWeekday,
     currency,
+    getAppToday(),
+    prefilteredMonthTransactions,
   );
   const categoryById = new Map(
     categories.filter(isActive).map((category) => [category.id, category]),

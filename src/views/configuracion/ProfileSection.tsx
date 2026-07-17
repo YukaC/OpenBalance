@@ -14,6 +14,7 @@ type ProfileSectionProps = {
   onSaveEmail: () => void;
   onCurrencyChange: (currency: CurrencyCode) => void;
   onSavingsGoalChange: (goal: number | null) => void;
+  onManualExchangeRateChange: (rate: number | null) => void;
 };
 
 export function ProfileSection({
@@ -26,11 +27,17 @@ export function ProfileSection({
   onSaveEmail,
   onCurrencyChange,
   onSavingsGoalChange,
+  onManualExchangeRateChange,
 }: ProfileSectionProps) {
   const isSetupComplete = profile.isSetupComplete === true;
   const [savingsGoalInput, setSavingsGoalInput] = useState(
     profile.monthlySavingsGoal != null && profile.monthlySavingsGoal > 0
       ? String(profile.monthlySavingsGoal)
+      : "",
+  );
+  const [exchangeRateInput, setExchangeRateInput] = useState(
+    profile.manualExchangeRate != null && profile.manualExchangeRate > 0
+      ? String(profile.manualExchangeRate)
       : "",
   );
 
@@ -56,6 +63,31 @@ export function ProfileSection({
     setSavingsGoalInput(String(rounded));
     if (profile.monthlySavingsGoal !== rounded) {
       onSavingsGoalChange(rounded);
+    }
+  }
+
+  function handleSaveExchangeRate() {
+    const trimmed = exchangeRateInput.trim();
+    if (!trimmed) {
+      setExchangeRateInput("");
+      if (profile.manualExchangeRate != null) {
+        onManualExchangeRateChange(null);
+      }
+      return;
+    }
+    const parsed = parseMoneyInput(trimmed);
+    if (!(parsed > 0)) {
+      setExchangeRateInput(
+        profile.manualExchangeRate != null && profile.manualExchangeRate > 0
+          ? String(profile.manualExchangeRate)
+          : "",
+      );
+      return;
+    }
+    const rounded = Math.round(parsed * 100) / 100;
+    setExchangeRateInput(String(rounded));
+    if (profile.manualExchangeRate !== rounded) {
+      onManualExchangeRateChange(rounded);
     }
   }
 
@@ -170,6 +202,30 @@ export function ProfileSection({
         />
         <span className="text-[11.5px] text-[var(--ink-faint)]">
           Se muestra el progreso en Resumen (balance del mes vs meta).
+        </span>
+      </label>
+
+      <label htmlFor="profile-exchange-rate" className="flex flex-col gap-1.5">
+        <span className="text-[12px] font-semibold text-[var(--ink-soft)]">
+          Tipo de cambio manual (ARS por 1 USD)
+        </span>
+        <input
+          id="profile-exchange-rate"
+          name="manualExchangeRate"
+          inputMode="decimal"
+          autoComplete="off"
+          value={exchangeRateInput}
+          onChange={(e) => setExchangeRateInput(e.target.value)}
+          onBlur={handleSaveExchangeRate}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          placeholder="Opcional"
+          className="w-full rounded-[10px] border border-[var(--line)] bg-[var(--surface-raised)] px-3 py-2.5 text-[14px] outline-none focus:border-[var(--ink)]"
+        />
+        <span className="text-[11.5px] text-[var(--ink-faint)]">
+          Solo para ver un equivalente aproximado en Resumen. No consulta APIs
+          externas.
         </span>
       </label>
     </CollapsibleLedgerSection>

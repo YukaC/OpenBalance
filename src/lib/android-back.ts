@@ -1,13 +1,9 @@
 /**
- * Soft substitute for Capacitor hardware back without `@capacitor/app`.
- *
- * Capacitor WebViews usually map the Android back key to `history.back()`.
- * We push a history entry when an overlay (e.g. transaction form) opens, then
- * close it on `popstate`. Full control (intercept exit, custom priority) needs:
- *   npm i @capacitor/app  →  App.addListener("backButton", …)
- *
- * @see docs/MOBILE.md
+ * Android hardware back (K2) via `@capacitor/app`.
+ * Falls back to history overlay binding for WebViews without the plugin.
  */
+
+import { isRunningInNativeApp } from "@/lib/device";
 
 const OVERLAY_HISTORY_FLAG = "rindeOverlay";
 
@@ -26,12 +22,7 @@ function readHistoryState(): OverlayHistoryState | null {
 
 /**
  * While `isOverlayOpen` is true, push a history entry and close on back/popstate.
- * Call from a `useEffect` in AppShell (or similar):
- *
- *   useEffect(
- *     () => bindOverlayHistoryBack(isFormOpen, closeForm),
- *     [isFormOpen, closeForm],
- *   );
+ * Soft substitute when Capacitor `backButton` is not available.
  */
 export function bindOverlayHistoryBack(
   isOverlayOpen: boolean,
@@ -53,9 +44,46 @@ export function bindOverlayHistoryBack(
 
   return () => {
     window.removeEventListener("popstate", onPopState);
-    // Closed via UI (Escape / submit), not hardware back — drop the extra entry.
     if (readHistoryState()?.[OVERLAY_HISTORY_FLAG]) {
       window.history.back();
     }
   };
+}
+
+export type NativeBackHandlers = {
+  isFormOpen: () => boolean;
+  closeForm: () => void;
+  getSection: () => string;
+  navigateHome: () => void;
+};
+
+/**
+ * Capacitor `backButton`: close form → leave section → exit app.
+ * No-op on web. Returns unsubscribe.
+ */
+export async function bindNativeBackButton(
+  handlers: NativeBackHandlers,
+): Promise<() => void> {
+  if (!isRunningInNativeApp()) return () => {};
+
+  try {
+    const { App } = await import("@capacitor/app");
+    const listener = await App.addListener("backButton", () => {
+      if (handlers.isFormOpen()) {
+        handlers.closeForm();
+        return;
+      }
+      const section = handlers.getSection();
+      if (section !== "/") {
+        handlers.navigateHome();
+        return;
+      }
+      void App.exitApp();
+    });
+    return () => {
+      void listener.remove();
+    };
+  } catch {
+    return () => {};
+  }
 }

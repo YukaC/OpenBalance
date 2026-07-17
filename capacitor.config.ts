@@ -10,6 +10,22 @@ const config: CapacitorConfig = {
     // server.url at localhost for production builds.
     androidScheme: "https",
   },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 1800,
+      launchAutoHide: true,
+      backgroundColor: "#e6e2db",
+      androidSplashResourceName: "splash",
+      androidScaleType: "CENTER_CROP",
+      showSpinner: false,
+      splashFullScreen: true,
+      splashImmersive: true,
+    },
+    LocalNotifications: {
+      smallIcon: "ic_stat_icon_config_sample",
+      iconColor: "#803e2f",
+    },
+  },
 };
 
 export default config;

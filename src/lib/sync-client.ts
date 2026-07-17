@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "@/lib/auth-flags";
+import { getSyncAuthHeaders } from "@/lib/native-auth";
 import {
   beginSync,
   endSync,
@@ -235,9 +236,10 @@ export async function pushPullSync(
     Boolean(options.keepalive) && bodyJson.length <= KEEPALIVE_MAX_BODY_BYTES;
 
   try {
+    const authHeaders = await getSyncAuthHeaders();
     const response = await fetch(`${API_BASE}/api/sync`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       credentials: "include",
       keepalive: useKeepalive,
       body: bodyJson,

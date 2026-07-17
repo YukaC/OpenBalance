@@ -13,7 +13,9 @@ import { TransactionRow } from "@/components/TransactionRow";
 import { ViewSkeleton } from "@/components/ViewSkeleton";
 import { WeekBreakdown } from "@/components/WeekBreakdown";
 import { getAppToday } from "@/lib/dates";
+import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
+import { getMonthTransactions } from "@/lib/month-index";
 import { useNavigateToSection } from "@/lib/section-nav";
 import {
   filterByPayWeek,
@@ -22,6 +24,8 @@ import {
   findBudgetAlerts,
   findCategorySpendAlerts,
   getHormigaDrainAlert,
+  isTransferLeg,
+  sumByType,
 } from "@/lib/summaries";
 import {
   hasRepairedTransactionsThisSession,
@@ -53,6 +57,17 @@ const RecurringExpenseHint = dynamic(
   { loading: () => null },
 );
 
+function convertWithManualRate(
+  amount: number,
+  fromCurrency: "ARS" | "USD",
+  toCurrency: "ARS" | "USD",
+  arsPerUsd: number,
+): number {
+  if (fromCurrency === toCurrency) return amount;
+  if (toCurrency === "ARS") return amount * arsPerUsd;
+  return amount / arsPerUsd;
+}
+
 export default function ResumenView() {
   const navigateToSection = useNavigateToSection();
   const hydrated = useFinanceStore((s) => s.hydrated);
@@ -62,6 +77,7 @@ export default function ResumenView() {
   const categories = useFinanceStore((s) => s.categories);
   const incomeSources = useFinanceStore((s) => s.incomeSources);
   const budgets = useFinanceStore((s) => s.budgets);
+  const accounts = useFinanceStore((s) => s.accounts);
   const openForm = useFinanceStore((s) => s.openForm);
   const openFormForEdit = useFinanceStore((s) => s.openFormForEdit);
   const deleteTransaction = useFinanceStore((s) => s.deleteTransaction);
@@ -73,8 +89,12 @@ export default function ResumenView() {
   const monthlySavingsGoal = useFinanceStore(
     (s) => s.profile.monthlySavingsGoal,
   );
+  const manualExchangeRate = useFinanceStore(
+    (s) => s.profile.manualExchangeRate,
+  );
   const showToast = useToastStore((s) => s.showToast);
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null);
+  const [accountFilter, setAccountFilter] = useState("all");
 
   useEffect(() => {
     setViewMode("mes");
@@ -86,17 +106,60 @@ export default function ResumenView() {
     markTransactionsRepairedThisSession();
   }, [hydrated, repairTransactions]);
 
+  useEffect(() => {
+    setAccountFilter("all");
+  }, [selectedMonth]);
+
+  const activeAccounts = useMemo(
+    () => accounts.filter(isActive),
+    [accounts],
+  );
+
+  const summaryCurrency = useMemo(() => {
+    if (accountFilter === "all") return defaultCurrency;
+    const account = activeAccounts.find((item) => item.id === accountFilter);
+    return account?.currency ?? defaultCurrency;
+  }, [accountFilter, activeAccounts, defaultCurrency]);
+
+  const monthReferenceToday = useMemo(() => getAppToday(), []);
+
+  const prefilteredMonthTransactions = useMemo(() => {
+    const monthTx = getMonthTransactions(transactions, selectedMonth, {
+      referenceToday: monthReferenceToday,
+      paydayWeekday,
+      currency: summaryCurrency,
+    });
+    if (accountFilter === "all") return monthTx;
+    return monthTx.filter((tx) => tx.accountId === accountFilter);
+  }, [
+    transactions,
+    selectedMonth,
+    monthReferenceToday,
+    paydayWeekday,
+    summaryCurrency,
+    accountFilter,
+  ]);
+
   const summary = useMemo(
     () =>
       buildMonthSummary(
         transactions,
         categories,
         selectedMonth,
-        getAppToday(),
+        monthReferenceToday,
         paydayWeekday,
-        defaultCurrency,
+        summaryCurrency,
+        prefilteredMonthTransactions,
       ),
-    [transactions, categories, selectedMonth, paydayWeekday, defaultCurrency],
+    [
+      transactions,
+      categories,
+      selectedMonth,
+      monthReferenceToday,
+      paydayWeekday,
+      summaryCurrency,
+      prefilteredMonthTransactions,
+    ],
   );
 
   const weeklyAverageIncome = useMemo(() => {
@@ -112,9 +175,21 @@ export default function ResumenView() {
         categories,
         selectedMonth,
         paydayWeekday,
-        { currency: defaultCurrency },
+        {
+          currency: summaryCurrency,
+          referenceToday: monthReferenceToday,
+          prefilteredMonthTransactions,
+        },
       ),
-    [transactions, categories, selectedMonth, paydayWeekday, defaultCurrency],
+    [
+      transactions,
+      categories,
+      selectedMonth,
+      paydayWeekday,
+      summaryCurrency,
+      monthReferenceToday,
+      prefilteredMonthTransactions,
+    ],
   );
 
   const budgetAlerts = useMemo(
@@ -125,7 +200,8 @@ export default function ResumenView() {
         budgets,
         selectedMonth,
         paydayWeekday,
-        defaultCurrency,
+        summaryCurrency,
+        prefilteredMonthTransactions,
       ),
     [
       transactions,
@@ -133,7 +209,8 @@ export default function ResumenView() {
       budgets,
       selectedMonth,
       paydayWeekday,
-      defaultCurrency,
+      summaryCurrency,
+      prefilteredMonthTransactions,
     ],
   );
 
@@ -145,15 +222,65 @@ export default function ResumenView() {
         selectedMonth,
         paydayWeekday,
         0.2,
-        defaultCurrency,
+        summaryCurrency,
+        prefilteredMonthTransactions,
       ),
-    [transactions, categories, selectedMonth, paydayWeekday, defaultCurrency],
+    [
+      transactions,
+      categories,
+      selectedMonth,
+      paydayWeekday,
+      summaryCurrency,
+      prefilteredMonthTransactions,
+    ],
   );
 
   const installmentDebt = useMemo(
-    () => computeInstallmentDebt(transactions, getAppToday()),
-    [transactions],
+    () => computeInstallmentDebt(transactions, monthReferenceToday),
+    [transactions, monthReferenceToday],
   );
+
+  const fxEquivalent = useMemo(() => {
+    const rate =
+      manualExchangeRate != null && manualExchangeRate > 0
+        ? manualExchangeRate
+        : null;
+    if (!rate) return null;
+
+    const otherCurrency: "ARS" | "USD" =
+      defaultCurrency === "ARS" ? "USD" : "ARS";
+    const otherMonthTx = getMonthTransactions(transactions, selectedMonth, {
+      referenceToday: monthReferenceToday,
+      paydayWeekday,
+      currency: otherCurrency,
+    }).filter((tx) => !isTransferLeg(tx));
+
+    if (otherMonthTx.length === 0) return null;
+
+    const otherIncome = sumByType(otherMonthTx, "ingreso", otherCurrency);
+    const otherExpense = sumByType(otherMonthTx, "gasto", otherCurrency);
+    const otherBalance = otherIncome - otherExpense;
+    if (otherIncome === 0 && otherExpense === 0) return null;
+
+    return {
+      otherCurrency,
+      otherBalance,
+      equivalentBalance: convertWithManualRate(
+        otherBalance,
+        otherCurrency,
+        defaultCurrency,
+        rate,
+      ),
+      rate,
+    };
+  }, [
+    manualExchangeRate,
+    defaultCurrency,
+    transactions,
+    selectedMonth,
+    monthReferenceToday,
+    paydayWeekday,
+  ]);
 
   const focusedWeek = useMemo(() => {
     if (summary.weeks.length === 0) return null;
@@ -170,12 +297,21 @@ export default function ResumenView() {
       transactions,
       focusedWeek.start,
       focusedWeek.end,
-      defaultCurrency,
+      summaryCurrency,
       paydayWeekday,
     )
+      .filter((tx) =>
+        accountFilter === "all" ? true : tx.accountId === accountFilter,
+      )
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, focusedWeek, defaultCurrency, paydayWeekday]);
+  }, [
+    transactions,
+    focusedWeek,
+    summaryCurrency,
+    paydayWeekday,
+    accountFilter,
+  ]);
 
   const categoriesById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -223,10 +359,58 @@ export default function ResumenView() {
 
       <section aria-label="Resumen del mes">
         <MonthNavigator />
+        {activeAccounts.length > 1 ? (
+          <label className="mb-3 mt-2 flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--ink-faint)]">
+              Cuenta
+            </span>
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              aria-label="Filtrar resumen por cuenta"
+              className={`w-full max-w-xs rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-[13px] text-[var(--ink)] outline-none transition-soft focus:border-[var(--select)] ${FOCUS_RING}`}
+            >
+              <option value="all">Todas las cuentas</option>
+              {activeAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} ({account.currency})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <MonthBalance
           summary={summary}
           weeklyAverageIncome={weeklyAverageIncome}
         />
+        {fxEquivalent ? (
+          <div
+            className="mt-3 rounded-[12px] border border-[var(--line)] bg-[var(--surface-raised)] px-3.5 py-3"
+            aria-label="Equivalente en moneda por defecto"
+          >
+            <p className="text-[12px] font-semibold text-[var(--ink-soft)]">
+              Equivalente en {defaultCurrency}
+            </p>
+            <p className="mt-1 text-[13px] tabular-nums text-[var(--ink)]">
+              Balance {fxEquivalent.otherCurrency}:{" "}
+              <Money
+                amount={fxEquivalent.otherBalance}
+                currency={fxEquivalent.otherCurrency}
+                withSign
+              />
+              {" → "}
+              <Money
+                amount={fxEquivalent.equivalentBalance}
+                currency={defaultCurrency}
+                withSign
+              />
+            </p>
+            <p className="mt-1.5 text-[11.5px] text-[var(--ink-faint)]">
+              Tasa manual: 1 USD = {fxEquivalent.rate.toLocaleString("es-AR")}{" "}
+              ARS. No es cotización oficial ni en tiempo real.
+            </p>
+          </div>
+        ) : null}
         {savingsGoal != null ? (
           <div
             className="mt-3 rounded-[12px] border border-[var(--line)] bg-[var(--surface-raised)] px-3.5 py-3"
@@ -237,7 +421,7 @@ export default function ResumenView() {
                 Meta de ahorro
               </p>
               <p className="text-[12.5px] font-semibold tabular-nums text-[var(--ink)]">
-                <Money amount={summary.balance} currency={defaultCurrency} />
+                <Money amount={summary.balance} currency={summaryCurrency} />
                 {" / "}
                 <Money amount={savingsGoal} currency={defaultCurrency} />
               </p>
