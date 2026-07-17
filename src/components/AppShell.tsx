@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { CurrencyProvider } from "@/lib/currency-context";
+import { startAutoSync, stopAutoSync } from "@/lib/auto-sync";
 import { isAuthEnabled } from "@/lib/auth-flags";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { WEEKDAY_LABELS } from "@/lib/format";
@@ -15,7 +16,6 @@ import {
   SectionNavContext,
   type AppSection,
 } from "@/lib/section-nav";
-import { pushPullSync } from "@/lib/sync-client";
 import { useFinanceStore } from "@/store/finance-store";
 import { AuthScreen } from "@/components/AuthScreen";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
@@ -179,8 +179,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
   const [isPinUnlocked, setIsPinUnlocked] = useState(false);
   const [hasPinLock, setHasPinLock] = useState(false);
   const authEnabled = isAuthEnabled();
-  const { status: sessionStatus } = useSession();
-  const didAutoSyncRef = useRef(false);
+  const { data: session, status: sessionStatus } = useSession();
 
   const navigateToSection = useCallback((href: string) => {
     const nextSection = normalizeSection(href);
@@ -243,15 +242,29 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isFormOpen, closeForm]);
 
-  // Optional background sync once hydrate + session are ready (never blocks UI).
+  // Auto sync: immediately on login (with retries) + idle debounce after edits.
   useEffect(() => {
-    if (!authEnabled) return;
-    if (!hydrated) return;
-    if (sessionStatus !== "authenticated") return;
-    if (didAutoSyncRef.current) return;
-    didAutoSyncRef.current = true;
-    void pushPullSync();
-  }, [authEnabled, hydrated, sessionStatus]);
+    if (!authEnabled || !hydrated) {
+      stopAutoSync();
+      return;
+    }
+    if (sessionStatus !== "authenticated") {
+      stopAutoSync();
+      return;
+    }
+    const sessionKey =
+      session?.user?.id ?? session?.user?.email ?? "authenticated";
+    startAutoSync(sessionKey);
+    return () => {
+      stopAutoSync();
+    };
+  }, [
+    authEnabled,
+    hydrated,
+    sessionStatus,
+    session?.user?.id,
+    session?.user?.email,
+  ]);
 
   if (!hydrated) {
     return <AppGateLoading />;

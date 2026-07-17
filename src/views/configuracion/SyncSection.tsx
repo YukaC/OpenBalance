@@ -59,8 +59,8 @@ export function SyncSection() {
       lede={
         authEnabled ? (
           <p className="section-lede">
-            Subí y bajá cambios con la nube. La app sigue usable sin conexión;
-            sincronizá cuando vuelvas a tener señal.
+            La nube se sincroniza sola al iniciar sesión y otra vez después de
+            10 minutos sin cambios. Este botón fuerza una sync ahora.
           </p>
         ) : (
           <p className="section-lede">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { triggerLoginSync } from "@/lib/auto-sync";
 import { getApiBaseUrl } from "@/lib/auth-flags";
 
 type AuthTab = "login" | "register";
@@ -70,6 +71,7 @@ export function AuthScreen() {
       );
       return false;
     }
+    triggerLoginSync(email.trim().toLowerCase());
     return true;
   }
 
