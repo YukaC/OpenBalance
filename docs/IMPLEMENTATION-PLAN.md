@@ -223,13 +223,15 @@ Docs: README — dejar de decir “PIN no cifra” cuando esté hecho.
 ### O2. Cola de mutaciones offline
 - Extender el patrón push/pull: cola en IndexedDB de cambios pending → replay al `online`.
 - Reusar `hasPendingLocalChanges` / auto-sync; no inventar segundo motor.
+- **Estado:** PARTIAL — dirty local + `replayPendingMutations` en `online`, SW Background Sync postMessage y visibility→visible (sin cola IDB dedicada).
 - **Done when:** crear gasto offline → al recuperar red, sync sin botón.
 
 ### O3. Indicador “sin conexión / cambios pendientes”
 - Solapa con **A1**; unificar en el mismo chip (no dos badges).
 
 ### O4. Chunking del `keepalive` fetch al cerrar pestaña
-- `flushPendingOnLeave` envía el payload completo con `keepalive: true`, pero Chrome/Firefox limitan ese body a ~64KB; con varios cambios pendientes el request puede truncarse silenciosamente.
+- `flushPendingOnLeave` envía con `keepalive: true`; Chrome/Firefox limitan el body a ~64KB.
+- **Estado:** DONE — si el payload estimado supera 50KB, `pushPullSync` parte en múltiples POSTs keepalive (arrancados juntos). Entidad única >50KB: sin keepalive + Background Sync como red de seguridad.
 - **Done when:** si el payload estimado supera un umbral seguro (ej. 50KB), partir en múltiples requests `keepalive` más chicos o priorizar solo lo más reciente.
 
 ### Entregable
@@ -657,9 +659,9 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 | Ítem | Estado | Nota |
 |------|--------|------|
 | O1 Service Worker | DONE | `public/sw.js` + `ServiceWorkerRegister` (sin Workbox) |
-| O2 Cola mutaciones | PARTIAL | Online/backoff + SW message; sin cola IDB dedicada |
+| O2 Cola mutaciones | PARTIAL | Replay unificado (`online` / SW / visibility→visible) + BG Sync; sin cola IDB dedicada |
 | O3 Chip offline | DONE | Unificado en A1 |
-| O4 Chunk keepalive | PARTIAL | Desactiva keepalive >50KB; no parte en N requests |
+| O4 Chunk keepalive | DONE | Parte payloads >50KB en N keepalive POSTs; BG Sync como safety net |
 
 ### Fase B — Auth producto
 | Ítem | Estado | Nota |

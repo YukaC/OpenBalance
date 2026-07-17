@@ -144,7 +144,19 @@ Todos los imports van detrás de `isRunningInNativeApp()` + dynamic `import()` p
 - No commitear secretos; solo `NEXT_PUBLIC_*` van al cliente.
 - Carpetas `/android` y `/ios` están en `.gitignore` hasta que decidas versionarlas.
 
+## Offline / PWA (Fase O) — sync sin segundo motor
+
+Cola de mutaciones = el store local dirty (`hasPendingLocalChanges`) + auto-sync:
+
+1. **Offline edit** → se registra Background Sync (`openbalance-sync-pending`).
+2. **`online` / visibility→visible / SW `sync` postMessage** → `replayPendingMutations` (mismo `pushPullSync` + backoff).
+3. **Leave flush** (`visibilitychange` hidden / `pagehide`) → `keepalive: true`.
+
+### O4 keepalive chunking
+
+Browsers cap keepalive bodies ~64KB. `pushPullSync({ keepalive: true })` splits dirty payloads above **50KB** into multiple keepalive POSTs (started together so `pagehide` does not cancel a single non-keepalive fetch). A lone entity larger than 50KB drops keepalive for that chunk; Background Sync remains the safety net.
+
 ## Related
 
 - [DEPLOY.md](./DEPLOY.md) — Neon + Vercel + env vars
-- [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md) — Fases C / K / E3 / S4
+- [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md) — Fases C / K / E3 / S4 / O

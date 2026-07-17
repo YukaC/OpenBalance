@@ -115,8 +115,9 @@ self.addEventListener("fetch", (event) => {
 
 /**
  * Optional Background Sync (O2): when the browser fires `sync` for our tag,
- * nudge open clients to flush pending local changes. Sync itself stays in the
- * page (cookies / Zustand); the SW only postMessages.
+ * nudge open clients to flush pending local changes via auto-sync replay.
+ * Sync itself stays in the page (cookies / Zustand); the SW only postMessages.
+ * No second sync engine in the worker.
  */
 const SYNC_PENDING_TAG = "openbalance-sync-pending";
 const SYNC_PENDING_MESSAGE = { type: "OPENBALANCE_SYNC_PENDING" };
@@ -128,8 +129,8 @@ self.addEventListener("sync", (event) => {
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clients) => {
-        for (const client of clients) {
+      .then((windowClients) => {
+        for (const client of windowClients) {
           client.postMessage(SYNC_PENDING_MESSAGE);
         }
       }),
