@@ -76,7 +76,8 @@ function resolveUpdatedAt(incoming: string | undefined, fallback: Date): Date {
   return parsed ?? fallback;
 }
 
-function shouldOverwrite(
+/** LWW: incoming wins on equal timestamps (server accepts the push). */
+export function shouldOverwrite(
   existingUpdatedAt: Date,
   incomingUpdatedAt: Date,
 ): boolean {
@@ -599,7 +600,7 @@ export async function collectOutgoingChanges(
   };
 }
 
-type IncomingEntityIds = {
+export type IncomingEntityIds = {
   profileId: string | null;
   accountIds: Set<string>;
   categoryIds: Set<string>;
@@ -610,7 +611,9 @@ type IncomingEntityIds = {
 };
 
 /** Ids present in the client's push payload for this request (echo exclusion). */
-function collectIncomingEntityIds(changes: SyncChanges): IncomingEntityIds {
+export function collectIncomingEntityIds(
+  changes: SyncChanges,
+): IncomingEntityIds {
   return {
     profileId: changes.profile?.id ?? null,
     accountIds: new Set((changes.accounts ?? []).map((entity) => entity.id)),
@@ -639,7 +642,7 @@ function filterExcludedIds<T extends { id: string }>(
  * Drop entities that were just upserted from this same request so the client
  * does not re-apply its own push as a remote change (A7 echo fix).
  */
-function excludeIncomingEcho(
+export function excludeIncomingEcho(
   outgoing: SyncChanges,
   incomingIds: IncomingEntityIds,
 ): SyncChanges {

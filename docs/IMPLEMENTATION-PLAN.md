@@ -746,12 +746,12 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 ### Fase F — Ops
 | Ítem | Estado | Nota |
 |------|--------|------|
-| F1 Tests sync | PARTIAL | `sync-client.test.ts`; sin `auto-sync`/`sync-server` tests |
+| F1 Tests sync | DONE | `sync-client` + `auto-sync` (backoff) + `sync-server` (LWW/echo) |
 | F1b Tests store | DONE | `finance-store.test.ts` |
-| F2 Tests UI | PARTIAL | `@playwright/test` en deps; sin config/specs aún |
+| F2 Tests UI | DONE | `playwright.config.ts` + `e2e/smoke.spec.ts` (flujos críticos opcionales) |
 | F3 Observabilidad | PARTIAL | `logger.ts` en APIs; sin Sentry |
 | F4 Rate limit | DONE | Cubierto por H3 |
 | F5 CI tests | DONE | Alias de H1 |
 | F6 Docs modelo | DONE | JSDoc pay-week en `types`/`dates`/`summaries` |
-| F7 Pre-commit | PARTIAL | `husky`/`lint-staged` en package.json; falta `.husky/` |
+| F7 Pre-commit | DONE | `.husky/pre-commit` → `lint-staged` |
 | F8 A11y liviano | DONE | `axe-core` + smoke test + `docs/A11Y.md` + eslint jsx-a11y intacto |
