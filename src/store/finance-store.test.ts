@@ -141,6 +141,108 @@ describe("finance-store addTransaction", () => {
   });
 });
 
+describe("finance-store addTransfer", () => {
+  beforeEach(() => {
+    resetStore();
+    useFinanceStore.setState({
+      accounts: [
+        {
+          id: "acc-principal",
+          name: "Principal",
+          currency: "ARS",
+          deletedAt: null,
+          updatedAt: "2026-03-01T00:00:00.000Z",
+        },
+        {
+          id: "acc-ahorro",
+          name: "Ahorro",
+          currency: "ARS",
+          deletedAt: null,
+          updatedAt: "2026-03-01T00:00:00.000Z",
+        },
+      ],
+    });
+  });
+
+  it("creates linked gasto+ingreso legs with the same transferGroupId", () => {
+    useFinanceStore.getState().addTransfer({
+      fromAccountId: "acc-principal",
+      toAccountId: "acc-ahorro",
+      amount: 1500.4,
+      date: "2026-03-15",
+      note: "Move cash",
+    });
+
+    const transactions = useFinanceStore.getState().transactions;
+    assert.equal(transactions.length, 2);
+
+    const outflow = transactions.find((tx) => tx.type === "gasto");
+    const inflow = transactions.find((tx) => tx.type === "ingreso");
+    assert.ok(outflow);
+    assert.ok(inflow);
+    assert.ok(outflow.transferGroupId);
+    assert.equal(outflow.transferGroupId, inflow.transferGroupId);
+    assert.match(outflow.transferGroupId!, /^xfer-/);
+
+    assert.equal(outflow.amount, 1500);
+    assert.equal(inflow.amount, 1500);
+    assert.equal(outflow.accountId, "acc-principal");
+    assert.equal(inflow.accountId, "acc-ahorro");
+    assert.equal(outflow.currency, "ARS");
+    assert.equal(inflow.currency, "ARS");
+    assert.equal(outflow.method, "transferencia");
+    assert.equal(inflow.method, "transferencia");
+    assert.equal(outflow.note, "Move cash");
+    assert.equal(inflow.note, "Move cash");
+    assert.equal(outflow.title, "Transferencia a Ahorro");
+    assert.equal(inflow.title, "Transferencia desde Principal");
+    assert.equal(outflow.deletedAt, null);
+    assert.equal(inflow.deletedAt, null);
+  });
+
+  it("soft-deletes both transfer legs together", () => {
+    useFinanceStore.getState().addTransfer({
+      fromAccountId: "acc-principal",
+      toAccountId: "acc-ahorro",
+      amount: 200,
+      date: "2026-03-15",
+    });
+
+    const [firstLeg] = useFinanceStore.getState().transactions;
+    assert.ok(firstLeg?.transferGroupId);
+
+    useFinanceStore.getState().deleteTransaction(firstLeg.id);
+
+    const afterDelete = useFinanceStore.getState().transactions;
+    assert.equal(afterDelete.length, 2);
+    assert.ok(afterDelete.every((tx) => tx.deletedAt != null));
+    assert.equal(
+      afterDelete[0].transferGroupId,
+      afterDelete[1].transferGroupId,
+    );
+  });
+
+  it("ignores invalid transfers (same account, missing account, non-positive amount)", () => {
+    useFinanceStore.getState().addTransfer({
+      fromAccountId: "acc-principal",
+      toAccountId: "acc-principal",
+      amount: 100,
+    });
+    useFinanceStore.getState().addTransfer({
+      fromAccountId: "acc-missing",
+      toAccountId: "acc-ahorro",
+      amount: 100,
+    });
+    useFinanceStore.getState().addTransfer({
+      fromAccountId: "acc-principal",
+      toAccountId: "acc-ahorro",
+      amount: 0,
+    });
+
+    assert.equal(useFinanceStore.getState().transactions.length, 0);
+  });
+});
+
 describe("finance-store deleteTransaction + restoreTransactions", () => {
   beforeEach(resetStore);
 
