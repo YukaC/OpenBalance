@@ -10,6 +10,8 @@ type WeekSlice = MonthSummary["weeks"][number];
 
 interface WeekBreakdownProps {
   summary: MonthSummary;
+  /** When monthly, collapse the strip behind "Ver desglose semanal". */
+  isCollapsible?: boolean;
 }
 
 interface WeekCardProps {
@@ -148,7 +150,10 @@ function WeekCard({
   );
 }
 
-export function WeekBreakdown({ summary }: WeekBreakdownProps) {
+export function WeekBreakdown({
+  summary,
+  isCollapsible = false,
+}: WeekBreakdownProps) {
   const monthName = formatMonthName(summary.monthKey).toLowerCase();
   const selectedWeekIso = useFinanceStore((s) => s.selectedWeekIso);
   const setSelectedWeekIso = useFinanceStore((s) => s.setSelectedWeekIso);
@@ -173,39 +178,25 @@ export function WeekBreakdown({ summary }: WeekBreakdownProps) {
       ? summary.weeks[activeWeekIndex + 1]
       : null;
 
-  return (
-    <section className="mb-1" aria-labelledby="weeks-heading">
-      <div className="mb-3 flex flex-wrap items-end justify-center gap-2 min-[880px]:mb-4">
-        <div className="section-intro">
-          <h2 id="weeks-heading" className="section-heading">
-            Semanas de {monthName}
-          </h2>
-          <p className="section-lede max-[879px]:hidden">
-            Tocá una semana para ver sus movimientos abajo
-          </p>
-          <p className="section-lede min-[880px]:hidden">
-            Semana activa — usá Anterior / Siguiente para cambiar
-          </p>
-        </div>
-      </div>
-
+  const body = (
+    <>
       {/* Mobile: single focused week + prev/next */}
       {focusedWeek ? (
         <div className="min-[880px]:hidden">
-          <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
             {previousWeek ? (
               <button
                 type="button"
                 onClick={() => setSelectedWeekIso(previousWeek.weekIso)}
                 aria-label="Semana anterior"
-                className={`text-xs font-semibold text-[var(--ink-soft)] underline-offset-2 hover:text-[var(--ink)] hover:underline ${FOCUS_RING} rounded-sm px-1 py-0.5`}
+                className={`rounded-sm px-1 py-0.5 text-xs font-semibold text-[var(--ink-soft)] underline-offset-2 hover:text-[var(--ink)] hover:underline ${FOCUS_RING}`}
               >
                 Anterior
               </button>
             ) : (
               <span className="w-16" aria-hidden />
             )}
-            <span className="text-[11px] font-medium text-[var(--ink-soft)] tabular-nums">
+            <span className="text-[11px] font-medium tabular-nums text-[var(--ink-soft)]">
               {Math.max(activeWeekIndex, 0) + 1} / {weekCount}
             </span>
             {nextWeek ? (
@@ -213,7 +204,7 @@ export function WeekBreakdown({ summary }: WeekBreakdownProps) {
                 type="button"
                 onClick={() => setSelectedWeekIso(nextWeek.weekIso)}
                 aria-label="Semana siguiente"
-                className={`text-xs font-semibold text-[var(--ink-soft)] underline-offset-2 hover:text-[var(--ink)] hover:underline ${FOCUS_RING} rounded-sm px-1 py-0.5`}
+                className={`rounded-sm px-1 py-0.5 text-xs font-semibold text-[var(--ink-soft)] underline-offset-2 hover:text-[var(--ink)] hover:underline ${FOCUS_RING}`}
               >
                 Siguiente
               </button>
@@ -244,10 +235,7 @@ export function WeekBreakdown({ summary }: WeekBreakdownProps) {
           const isSelected = activeWeekIso === week.weekIso;
 
           return (
-            <li
-              key={week.weekIso}
-              className="relative min-w-0 flex-1"
-            >
+            <li key={week.weekIso} className="relative min-w-0 flex-1">
               <WeekCard
                 week={week}
                 isSelected={isSelected}
@@ -258,6 +246,49 @@ export function WeekBreakdown({ summary }: WeekBreakdownProps) {
           );
         })}
       </ul>
+    </>
+  );
+
+  if (isCollapsible) {
+    return (
+      <details className="group mb-1">
+        <summary className="mb-3 flex cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+          <div className="section-intro">
+            <h2 id="weeks-heading" className="section-heading">
+              Ver desglose semanal
+            </h2>
+            <p className="section-lede">
+              Opcional — el total del mes ya está arriba
+            </p>
+          </div>
+          <span
+            aria-hidden
+            className="shrink-0 text-[14px] text-[var(--ink-faint)] transition-transform duration-200 group-open:rotate-180"
+          >
+            ▾
+          </span>
+        </summary>
+        {body}
+      </details>
+    );
+  }
+
+  return (
+    <section className="mb-1" aria-labelledby="weeks-heading">
+      <div className="mb-3 flex flex-wrap items-end justify-center gap-2 min-[880px]:mb-4">
+        <div className="section-intro">
+          <h2 id="weeks-heading" className="section-heading">
+            Semanas de {monthName}
+          </h2>
+          <p className="section-lede max-[879px]:hidden">
+            Tocá una semana para ver sus movimientos abajo
+          </p>
+          <p className="section-lede min-[880px]:hidden">
+            Semana activa — usá Anterior / Siguiente para cambiar
+          </p>
+        </div>
+      </div>
+      {body}
     </section>
   );
 }

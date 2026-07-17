@@ -1,6 +1,6 @@
 # OpenBalance
 
-App de finanzas personales pensada para quien cobra **por semana** y decide **por mes**.
+App de finanzas personales pensada para quien decide **por mes** — con cobro **mensual por default** y semanas de pago **opcionales** para quien cobra por semana.
 
 Cargá ingresos y gastos con poca fricción, clasificá por keywords y mirá el resumen del mes en segundos.
 
@@ -64,7 +64,7 @@ npm run dev
 
 | Ruta | Qué hace |
 |------|----------|
-| `/` | Resumen del mes: balance, semanas de cobro, movimientos de la semana |
+| `/` | Resumen del mes: balance, desglose (semanas opcionales), movimientos |
 | `/transacciones` | Listado filtrable |
 | `/categorias` | Categorías, keywords y presupuestos |
 | `/configuracion` | Perfil, cuentas, cobro, PIN, sync, backup/CSV, descargar app (mobile web) |
@@ -73,7 +73,7 @@ La ruta `/semanas` redirige a `/` (unificada en el resumen).
 
 ## Modelo
 
-Cada transacción guarda fecha real y campos derivados (`weekIso`, `month`). Los totales del mes usan **semanas de pago** (día de cobro configurable), no solo el mes calendario.
+Cada transacción guarda fecha real y campos derivados (`weekIso`, `month`). Los totales del mes usan el **mes calendario** cuando cobrás mensual (default), o **semanas de pago** cuando elegís cadencia semanal (día de cobro configurable).
 
 Onboarding local en la primera visita. PIN opcional: deriva una clave local (PBKDF2 + AES-GCM) y cifra el blob en IndexedDB; el PIN nunca viaja al servidor. Sin PIN = almacenamiento en claro. Con auth activado: registro/login antes de usar sync.
 

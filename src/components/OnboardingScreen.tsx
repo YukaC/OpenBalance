@@ -9,11 +9,15 @@ import {
 } from "@/lib/format";
 import type { CurrencyCode } from "@/lib/format";
 import { initialsFromName } from "@/lib/profile-setup";
-import type { Weekday } from "@/lib/types";
+import type { PayCadence, PaydayDayOfMonth, Weekday } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ONBOARDING_ERROR_ID = "onboarding-error";
+
+const MONTHLY_DAY_OPTIONS: PaydayDayOfMonth[] = [
+  1, 5, 10, 15, 20, 25, 28, 0,
+];
 
 type OnboardingErrorField = "name" | "email";
 
@@ -21,11 +25,22 @@ export function OnboardingScreen() {
   const profile = useFinanceStore((s) => s.profile);
   const updateProfile = useFinanceStore((s) => s.updateProfile);
   const setPayday = useFinanceStore((s) => s.setPayday);
+  const setPayCadence = useFinanceStore((s) => s.setPayCadence);
+  const setPaydayDayOfMonth = useFinanceStore((s) => s.setPaydayDayOfMonth);
 
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
-  const [paydayWeekday, setPaydayWeekday] = useState<Weekday>(profile.paydayWeekday);
-  const [currency, setCurrency] = useState<CurrencyCode>(profile.defaultCurrency);
+  const [payCadence, setPayCadenceLocal] = useState<PayCadence>(
+    profile.payCadence ?? "monthly",
+  );
+  const [paydayWeekday, setPaydayWeekday] = useState<Weekday>(
+    profile.paydayWeekday,
+  );
+  const [paydayDayOfMonth, setPaydayDayOfMonthLocal] =
+    useState<PaydayDayOfMonth>(profile.paydayDayOfMonth ?? 1);
+  const [currency, setCurrency] = useState<CurrencyCode>(
+    profile.defaultCurrency,
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [errorField, setErrorField] = useState<OnboardingErrorField | null>(
     null,
@@ -51,11 +66,15 @@ export function OnboardingScreen() {
       name: trimmedName,
       email: trimmedEmail,
       defaultCurrency: currency,
+      payCadence,
       paydayWeekday,
+      paydayDayOfMonth,
       initials: initialsFromName(trimmedName),
       isSetupComplete: true,
     });
+    setPayCadence(payCadence);
     setPayday(paydayWeekday);
+    setPaydayDayOfMonth(paydayDayOfMonth);
   }
 
   return (
@@ -125,34 +144,102 @@ export function OnboardingScreen() {
 
         <div>
           <p className="mb-2 text-[12px] font-semibold text-[var(--ink-soft)]">
-            Día de cobro
+            ¿Cómo cobrás?
           </p>
           <div
             className="flex flex-wrap gap-2"
             role="group"
-            aria-label="Día de cobro"
+            aria-label="Cadencia de cobro"
           >
-            {WEEKDAYS.map((day) => {
-              const active = paydayWeekday === day;
+            {(
+              [
+                { value: "monthly" as const, label: "Mensual" },
+                { value: "weekly" as const, label: "Semanal" },
+              ] as const
+            ).map((option) => {
+              const active = payCadence === option.value;
               return (
                 <button
-                  key={day}
+                  key={option.value}
                   type="button"
-                  onClick={() => setPaydayWeekday(day)}
-                  title={WEEKDAY_FULL[day]}
+                  onClick={() => setPayCadenceLocal(option.value)}
                   aria-pressed={active}
-                  className={`rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                  className={`rounded-[9px] px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
                     active
                       ? "is-selected-solid"
                       : "bg-[var(--bg)] text-[var(--ink-soft)] hover:text-[var(--ink)]"
                   }`}
                 >
-                  {WEEKDAY_LABELS[day]}
+                  {option.label}
                 </button>
               );
             })}
           </div>
         </div>
+
+        {payCadence === "monthly" ? (
+          <div>
+            <p className="mb-2 text-[12px] font-semibold text-[var(--ink-soft)]">
+              Día de cobro del mes
+            </p>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="Día de cobro del mes"
+            >
+              {MONTHLY_DAY_OPTIONS.map((day) => {
+                const active = paydayDayOfMonth === day;
+                const label = day <= 0 ? "Último" : String(day);
+                return (
+                  <button
+                    key={day === 0 ? "last" : day}
+                    type="button"
+                    onClick={() => setPaydayDayOfMonthLocal(day)}
+                    aria-pressed={active}
+                    className={`rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                      active
+                        ? "is-selected-solid"
+                        : "bg-[var(--bg)] text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="mb-2 text-[12px] font-semibold text-[var(--ink-soft)]">
+              Día de cobro
+            </p>
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="Día de cobro"
+            >
+              {WEEKDAYS.map((day) => {
+                const active = paydayWeekday === day;
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setPaydayWeekday(day)}
+                    title={WEEKDAY_FULL[day]}
+                    aria-pressed={active}
+                    className={`rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                      active
+                        ? "is-selected-solid"
+                        : "bg-[var(--bg)] text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                    }`}
+                  >
+                    {WEEKDAY_LABELS[day]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div>
           <p className="mb-2 text-[12px] font-semibold text-[var(--ink-soft)]">

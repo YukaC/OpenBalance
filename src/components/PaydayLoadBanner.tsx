@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   maybeNotifyPaydayLoad,
+  PAYDAY_NOTIFICATION_BODY_MONTHLY,
+  PAYDAY_NOTIFICATION_BODY_WEEKLY,
   shouldShowPaydayLoadReminder,
 } from "@/lib/payday-reminder";
 import { useFinanceStore } from "@/store/finance-store";
@@ -24,33 +26,43 @@ function readPaydayDismissed(): boolean {
 export function PaydayLoadBanner() {
   const hydrated = useFinanceStore((s) => s.hydrated);
   const transactions = useFinanceStore((s) => s.transactions);
+  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
+  const paydayDayOfMonth = useFinanceStore((s) => s.profile.paydayDayOfMonth);
   const shouldRemindPaydayLoad = useFinanceStore(
     (s) => s.profile.shouldRemindPaydayLoad,
   );
   const openForm = useFinanceStore((s) => s.openForm);
   const [isDismissed, setIsDismissed] = useState(readPaydayDismissed);
 
+  const reminderProfile = useMemo(
+    () => ({
+      payCadence: payCadence ?? "monthly",
+      paydayWeekday,
+      paydayDayOfMonth: paydayDayOfMonth ?? 1,
+      shouldRemindPaydayLoad: Boolean(shouldRemindPaydayLoad),
+    }),
+    [payCadence, paydayWeekday, paydayDayOfMonth, shouldRemindPaydayLoad],
+  );
+
   const shouldShow = useMemo(() => {
     if (!hydrated || isDismissed) return false;
     return shouldShowPaydayLoadReminder(
       transactions,
-      paydayWeekday,
-      shouldRemindPaydayLoad,
+      reminderProfile,
       new Date(),
     );
-  }, [
-    hydrated,
-    isDismissed,
-    transactions,
-    paydayWeekday,
-    shouldRemindPaydayLoad,
-  ]);
+  }, [hydrated, isDismissed, transactions, reminderProfile]);
 
   useEffect(() => {
     if (!shouldShow) return;
-    maybeNotifyPaydayLoad();
-  }, [shouldShow]);
+    maybeNotifyPaydayLoad({
+      body:
+        reminderProfile.payCadence === "monthly"
+          ? PAYDAY_NOTIFICATION_BODY_MONTHLY
+          : PAYDAY_NOTIFICATION_BODY_WEEKLY,
+    });
+  }, [shouldShow, reminderProfile.payCadence]);
 
   function handleDismiss() {
     setIsDismissed(true);
@@ -62,6 +74,11 @@ export function PaydayLoadBanner() {
   }
 
   if (!shouldShow) return null;
+
+  const message =
+    reminderProfile.payCadence === "monthly"
+      ? "Todavía no cargaste el ingreso de este mes"
+      : "Todavía no cargaste el ingreso de esta semana";
 
   return (
     <aside
@@ -75,7 +92,7 @@ export function PaydayLoadBanner() {
             Día de cobro
           </p>
           <p className="mt-1 text-[13.5px] font-semibold leading-snug text-[var(--ink)]">
-            Todavía no cargaste el ingreso de esta semana
+            {message}
           </p>
         </div>
         <button

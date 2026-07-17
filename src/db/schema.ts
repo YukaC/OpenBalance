@@ -52,7 +52,11 @@ export const profiles = pgTable("profiles", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   defaultCurrency: text("default_currency").notNull().default("ARS"),
+  /** "monthly" | "weekly" — new profiles default monthly. */
+  payCadence: text("pay_cadence").notNull().default("monthly"),
   paydayWeekday: text("payday_weekday").notNull().default("viernes"),
+  /** 1–28, or 0 for last day of month (monthly cadence). */
+  paydayDayOfMonth: integer("payday_day_of_month").notNull().default(1),
   initials: text("initials").notNull().default("??"),
   isSetupComplete: boolean("is_setup_complete").notNull().default(false),
   defaultAccountId: text("default_account_id"),

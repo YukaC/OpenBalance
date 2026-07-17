@@ -184,17 +184,58 @@ export function shiftIsoDateByMonths(dateIso: string, months: number): string {
 }
 
 /**
+ * Clamp a preferred day-of-month onto a concrete calendar day.
+ * `preferredDay` 1–31 is clamped to the month length; `0` means last day.
+ * Shared by monthly payday reminders and recurring-income projection (G6).
+ */
+export function clampDayOfMonth(
+  year: number,
+  monthIndex: number,
+  preferredDay: number,
+): number {
+  const lastDay = getDate(endOfMonth(new Date(year, monthIndex, 1)));
+  if (preferredDay <= 0) return lastDay;
+  return Math.min(preferredDay, lastDay);
+}
+
+/** ISO date (yyyy-MM-dd) for a day-of-month inside `monthKey`. */
+export function resolveDayOfMonthIso(
+  monthKey: string,
+  preferredDay: number,
+): string {
+  const monthStart = parseMonthKey(monthKey);
+  const day = clampDayOfMonth(
+    monthStart.getFullYear(),
+    monthStart.getMonth(),
+    preferredDay,
+  );
+  return format(
+    new Date(monthStart.getFullYear(), monthStart.getMonth(), day),
+    "yyyy-MM-dd",
+  );
+}
+
+/**
+ * True when `referenceDate` falls on the resolved day-of-month payday
+ * (clamped / last-day aware).
+ */
+export function isDayOfMonthDate(
+  referenceDate: Date,
+  preferredDay: number,
+): boolean {
+  const year = referenceDate.getFullYear();
+  const monthIndex = referenceDate.getMonth();
+  const targetDay = clampDayOfMonth(year, monthIndex, preferredDay);
+  return getDate(referenceDate) === targetDay;
+}
+
+/**
  * Project a date onto another month, clamping the day to that month's length
  * (e.g. Jan 31 → Feb 28).
  */
 export function projectIsoDateToMonth(dateIso: string, monthKey: string): string {
   const day = getDate(parseISO(dateIso));
-  const monthStart = parseMonthKey(monthKey);
-  const clampedDay = Math.min(day, getDate(endOfMonth(monthStart)));
-  return format(
-    new Date(monthStart.getFullYear(), monthStart.getMonth(), clampedDay),
-    "yyyy-MM-dd",
-  );
+  return resolveDayOfMonthIso(monthKey, day);
 }
 
 /**

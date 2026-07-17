@@ -712,13 +712,13 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 ### Fase M — Ciclo mensual / cobro semanal configurable
 | Ítem | Estado | Nota |
 |------|--------|------|
-| M1 `payCadence` + columna sync | TODO | Nuevo campo `UserProfile`; migración additiva pendiente |
-| M2 Bifurcar `month-index`/`summaries` | TODO | `filterByMonth` calendario ya existe como fallback; promoverlo a camino primario |
-| M3 Selector en `PaydaySection` | TODO | — |
-| M4 Colapsar semana en Resumen | TODO | `WeekBreakdown` pasa a opcional en modo mensual |
-| M5 Reminder por día-del-mes | TODO | Compartir heurística con `G6` |
-| M6 Paso de cadencia en onboarding | TODO | — |
-| M7 `E1` sobre mes calendario | TODO | Bloquea completar `E1` |
+| M1 `payCadence` + columna sync | DONE | `pay_cadence` + `payday_day_of_month`; existentes → weekly |
+| M2 Bifurcar `month-index`/`summaries` | DONE | `filterByMonth` primario cuando monthly |
+| M3 Selector en `PaydaySection` | DONE | Mensual\|Semanal + día 1–28 / Último |
+| M4 Colapsar semana en Resumen | DONE | `WeekBreakdown` opcional en monthly |
+| M5 Reminder por día-del-mes | DONE | `clampDayOfMonth` compartido con proyección G6 |
+| M6 Paso de cadencia en onboarding | DONE | Antes de moneda |
+| M7 `E1` sobre mes calendario | DONE | `findBudgetAlerts` respeta `payCadence` |
 
 ### Fase G — Robustez
 | Ítem | Estado | Nota |

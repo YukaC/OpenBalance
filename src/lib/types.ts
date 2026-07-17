@@ -22,6 +22,15 @@ export type Weekday =
   | "sabado"
   | "domingo";
 
+/** How the user gets paid — drives month filtering and payday reminders. */
+export type PayCadence = "monthly" | "weekly";
+
+/**
+ * Day of month for monthly payday: 1–28, or 0 for the last day of the month.
+ * Clamped when the target month is shorter (shared with recurring-income projection).
+ */
+export type PaydayDayOfMonth = number;
+
 /** Soft-delete / sync timestamps — optional until migrate fills them. */
 export interface SyncLifecycle {
   /** ISO timestamp of last local mutation. */
@@ -35,7 +44,16 @@ export interface UserProfile extends SyncLifecycle {
   name: string;
   email: string;
   defaultCurrency: "ARS" | "USD";
+  /**
+   * Pay cycle model. Default for new profiles: monthly (calendar month).
+   * Existing weekly users migrate to weekly on first hydrate / SQL migrate.
+   */
+  payCadence: PayCadence;
   paydayWeekday: Weekday;
+  /**
+   * Monthly payday day-of-month (1–28, or 0 = last day). Ignored when weekly.
+   */
+  paydayDayOfMonth: PaydayDayOfMonth;
   initials: string;
   /** False/undefined until first-run onboarding finishes. Seed demo sets true. */
   isSetupComplete?: boolean;
