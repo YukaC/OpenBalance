@@ -664,8 +664,8 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 ### Fase B — Auth producto
 | Ítem | Estado | Nota |
 |------|--------|------|
-| B1 Reset password | PARTIAL | API + Resend/tokens; falta UI en `AuthScreen` |
-| B2 Cambio email/password | PARTIAL | Cambio password en Config; sin cambio de email |
+| B1 Reset password | DONE | API + Resend/tokens + UI forgot/reset en `AuthScreen` |
+| B2 Cambio email/password | DONE | Config: `AccountSecuritySection` (email + password) |
 | B3 Export cloud-ready | PARTIAL | Backup respeta `updatedAt`/`deletedAt`; CSV menos completo |
 
 ### Fase C — Android
