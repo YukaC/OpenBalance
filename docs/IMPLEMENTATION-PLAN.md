@@ -1,6 +1,6 @@
 # Plan de implementación — OpenBalance
 
-Fecha: 2026-07-16 (actualizado con análisis de producto + épicas de seguridad/offline; ampliado con hallazgos de 8 subagentes de exploración paralela — sección 8)  
+Fecha: 2026-07-17 (actualizado con análisis de producto + épicas de seguridad/offline; ampliado con hallazgos de 8 subagentes de exploración paralela — sección 8; sumada Fase M: ciclo mensual/semanal configurable)  
 Repo: `YukaC/OpenBalance` · App: **OpenBalance**
 
 Principios: **DRY**, **KISS**, sin dependencias nuevas sin preguntar, lógica de cálculo siempre en cliente, backend tonto (CRUD/sync).
@@ -65,6 +65,7 @@ Llevar OpenBalance de “MVP con cuenta y sync básico” a un producto **seguro
 | E | Presupuestos / metas / notif nativa | P2 | M | D parcial, C para E3 |
 | **J** | **UX / accesibilidad** (undo, validación, foco) | P2 | S–M | — |
 | **G** | **Robustez de producto** (clasificador, PDF, FX, virtualización) | P2 | M | Uso real justifica timing |
+| **M** | **Ciclo mensual / cobro semanal configurable** | **P1 producto** | M–L | — (afecta E1, G6) |
 | F | Ops / calidad | P2 | S–M | A |
 
 ```mermaid
@@ -77,6 +78,7 @@ flowchart TD
   B --> C
   C --> K[K Mobile avanzado]
   D[D Saldos y transferencias] --> E[E Presupuestos y metas]
+  M[M Ciclo mensual / semanal] --> E
   I[I Performance percibida]
   A --> F[F Ops]
   G[G Robustez producto]
@@ -323,6 +325,53 @@ PR: `feat/account-balances-and-transfers`
 
 ---
 
+## Fase M — Ciclo mensual / cobro semanal configurable (P1 producto)
+
+> El posicionamiento actual (`§1`) asume que **todo** usuario cobra por semana y decide por mes. Es un buen diferencial de nicho (freelancers/changas), pero deja afuera al usuario mayoritario que cobra sueldo mensual fijo y para quien la semana de pago no significa nada. Un switch de cadencia en Configuración, **mensual por default**, resuelve esto sin perder el diferencial semanal para quien lo necesita.
+>
+> **Hallazgo clave explorando el código:** el camino de filtrado por mes calendario (`filterByMonth`) **ya existe** en `summaries.ts` — hoy se usa solo como fallback cuando `getMonthWorkWeeks` no devuelve semanas. La Fase M no inventa un modelo temporal nuevo; promueve ese camino a primera clase cuando `payCadence === "monthly"` y deja el modelo de pay-week intacto para `"weekly"`. Esto mantiene el diff acotado (DRY/KISS) en vez de bifurcar toda la capa de dominio.
+
+### M1. `payCadence` en `UserProfile` + columna de sync
+- Nuevo campo `payCadence: "monthly" | "weekly"` en `UserProfile` (`src/lib/types.ts`), default `"monthly"`.
+- Columna Postgres additiva (mismo patrón que `H10` / `drizzle/0001_add_missing_prod_columns.sql`): `pay_cadence text not null default 'monthly'`. `db:generate` + revisión manual + `db:migrate`, nunca `db:push` directo en prod.
+- **Migración de usuarios existentes (crítico, no trivial):** todo perfil que ya tiene `paydayWeekday` seteado explícitamente por el usuario (no el default de seed) debe migrar a `payCadence: "weekly"`, no a `"monthly"`, para no cambiarle el modelo de un día para el otro a quien ya vive en semanas de pago. Perfiles nuevos post-deploy arrancan en `"monthly"`.
+- **Done when:** perfil nuevo → `"monthly"`; perfil con `paydayWeekday` ya usado → conserva `"weekly"` tras la migración, sin acción del usuario.
+
+### M2. `month-index.ts` / `summaries.ts`: bifurcar por cadencia, no reescribir
+- `getMonthTransactions` (único punto de entrada usado por `ResumenView`/`TransaccionesView`) recibe `payCadence` y decide: `"monthly"` → `filterByMonth` (calendario, ya existe) como camino primario; `"weekly"` → `filterByMonthPayWeeks` (comportamiento actual, sin cambios).
+- `buildMonthSummary`: en modo `"monthly"`, `weeks` se calcula igual (no rompe el tipo) pero pasa a ser metadata secundaria, no la fuente de verdad del total del mes.
+- **Done when:** con `payCadence = "monthly"`, el total de Resumen coincide con el mes calendario (1 al 30/31), no con la ventana de pay-weeks.
+
+### M3. Config: extender `PaydaySection` con el selector de cadencia
+- Selector "¿Cómo cobrás?" → **Mensual** (default) | **Semanal**, arriba del selector de día.
+- Modo `"monthly"`: día de cobro del mes (1–28 o "Último día"), en vez de día de la semana.
+- Modo `"weekly"`: UI actual sin cambios (día de semana + `lede` existente).
+- **Done when:** cambiar el switch reordena el resto de la sección sin perder el valor ya guardado del modo anterior (no se pisan entre sí).
+
+### M4. `ResumenView` / `WeekBreakdown` / `MonthComparisonChart`: colapsar la semana en modo mensual
+- En `"monthly"`, `WeekBreakdown` pasa a bloque colapsable opcional ("Ver desglose semanal"), no al frente como hoy.
+- `MonthComparisonChart` compara mes contra mes en ambos modos (ya lo hace por `monthKey`; no requiere cambios de fondo, solo verificar que no dependa implícitamente de pay-weeks).
+- **Done when:** en modo mensual, Resumen abre mostrando ingreso/gasto/saldo del mes primero; la semana queda un clic más lejos.
+
+### M5. `payday-reminder.ts`: soportar día-del-mes, no solo día-de-semana
+- Hoy `isPaydayDate`/`shouldShowPaydayLoadReminder`/`syncNativePaydayNotification` solo entienden `Weekday`. En modo `"monthly"` el "día de cobro" es un número de mes (o "último día").
+- Comparte heurística con **G6** (detección de ingreso recurrente mensual por día-del-mes) — implementar la función de "es hoy el día de cobro" una sola vez y que la reutilicen `payday-reminder.ts` y la auto-proyección de G6, en vez de dos heurísticas paralelas.
+- **Done when:** con `payCadence = "monthly"` y día de cobro = 30, el banner/notificación dispara el día 30 (o último día del mes si el mes tiene menos días).
+
+### M6. Onboarding: paso de cadencia antes que moneda
+- `OnboardingScreen` ya pisa `paydayWeekday` con el default de seed; agregar paso "¿Cómo cobrás?" (Mensual default | Semanal) antes de moneda, coherente con `M1`.
+- **Done when:** un usuario nuevo elige el modo en el onboarding y `PaydaySection` arranca ya configurada así.
+
+### M7. `E1` (presupuesto por semanas) se adapta a la cadencia
+- Con `payCadence = "monthly"`, las barras/alertas de presupuesto (`E1`, `findBudgetAlerts`) deben leer contra el mes calendario, no contra `weeks` de pay-week. Con `"weekly"` sigue como está planeado en `E1`.
+- **Done when:** implementar `E1` después de `M2`, no antes, para no construirlo dos veces.
+
+### Entregable
+PR: `feat/pay-cadence-monthly-default` (M1, M2, M3) + `feat/pay-cadence-ui-and-reminders` (M4, M5, M6)  
+Docs: `README.md` — reescribir `§1` (posicionamiento) para reflejar "mensual por default, semanal opcional" en vez de "cobra por semana" como única premisa.
+
+---
+
 ## Fase I — Performance percibida (P1–P2)
 
 > Del subagente de performance: el código está en buen estado general (selectors por slice, `useMemo`, code-splitting por vista), pero hay recomputación redundante que se nota con historiales largos.
@@ -506,7 +555,8 @@ PR: `chore/sync-tests-and-hardening`
 | 5b | 3–5 días | **K1–K2** backup nativo + back button (mayor impacto de Fase K; K3-K6 quedan como pulido oportunista) |
 | 6 | 4–6 días | **D1, D2, D4** saldos + transferencias + vista de deuda en cuotas |
 | 6b | 2–3 días | **I1–I5** performance percibida (índice mensual, code-split, debounce) — hacer si el historial de datos ya se siente pesado |
-| 7 | 2–4 días | **E1 + E2** (+ E3 si Android estable) |
+| 6c | 4–6 días | **M1–M6** ciclo mensual/semanal configurable — hacer antes de E1, que depende de esta decisión |
+| 7 | 2–4 días | **E1 (post-M7) + E2** (+ E3 si Android estable) |
 | 7b | 2–3 días | **J1–J7** UX/accesibilidad (undo, validación, foco) — intercalar según feedback de uso real |
 | 8 | según | **G\*** según dolor real (clasificador → recurrencia → PDF → FX → virtualización) |
 | 9 | 2–3 días | **F\*** tests de `finance-store`/`sync-*`, CI, docs en código, pre-commit |
@@ -655,9 +705,20 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 ### Fase E — Presupuestos / metas
 | Ítem | Estado | Nota |
 |------|--------|------|
-| E1 Presupuesto × semanas | PARTIAL | Alertas pay-week; sin barras/breakdown por semana |
+| E1 Presupuesto × semanas | PARTIAL | Alertas pay-week; rediseñar contra `M7` antes de completar |
 | E2 Meta ahorro | DONE | Profile + progreso en Resumen |
 | E3 Notif nativa cobro | TODO | Solo banner in-app (`payday-reminder`) |
+
+### Fase M — Ciclo mensual / cobro semanal configurable
+| Ítem | Estado | Nota |
+|------|--------|------|
+| M1 `payCadence` + columna sync | TODO | Nuevo campo `UserProfile`; migración additiva pendiente |
+| M2 Bifurcar `month-index`/`summaries` | TODO | `filterByMonth` calendario ya existe como fallback; promoverlo a camino primario |
+| M3 Selector en `PaydaySection` | TODO | — |
+| M4 Colapsar semana en Resumen | TODO | `WeekBreakdown` pasa a opcional en modo mensual |
+| M5 Reminder por día-del-mes | TODO | Compartir heurística con `G6` |
+| M6 Paso de cadencia en onboarding | TODO | — |
+| M7 `E1` sobre mes calendario | TODO | Bloquea completar `E1` |
 
 ### Fase G — Robustez
 | Ítem | Estado | Nota |
