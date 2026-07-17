@@ -1,9 +1,9 @@
 "use client";
 
-import { isWithinInterval, parseISO } from "date-fns";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { BudgetAlertBanner } from "@/components/BudgetAlertBanner";
+import { BudgetProgress } from "@/components/BudgetProgress";
 import { CategorySpendAlert } from "@/components/CategorySpendAlert";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HormigaDrainNote } from "@/components/HormigaDrainNote";
@@ -19,6 +19,8 @@ import { FOCUS_RING } from "@/lib/focus-ring";
 import { getMonthTransactions } from "@/lib/month-index";
 import { useNavigateToSection } from "@/lib/section-nav";
 import {
+  filterByPayWeek,
+  buildBudgetProgress,
   buildMonthSummary,
   computeInstallmentDebt,
   findBudgetAlerts,
@@ -85,7 +87,6 @@ export default function ResumenView() {
   const repairTransactions = useFinanceStore((s) => s.repairTransactions);
   const setViewMode = useFinanceStore((s) => s.setViewMode);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
-  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const defaultCurrency = useFinanceStore((s) => s.profile.defaultCurrency);
   const monthlySavingsGoal = useFinanceStore(
     (s) => s.profile.monthlySavingsGoal,
@@ -129,7 +130,6 @@ export default function ResumenView() {
       referenceToday: monthReferenceToday,
       paydayWeekday,
       currency: summaryCurrency,
-      payCadence: payCadence ?? "monthly",
     });
     if (accountFilter === "all") return monthTx;
     return monthTx.filter((tx) => tx.accountId === accountFilter);
@@ -138,7 +138,6 @@ export default function ResumenView() {
     selectedMonth,
     monthReferenceToday,
     paydayWeekday,
-    payCadence,
     summaryCurrency,
     accountFilter,
   ]);
@@ -153,7 +152,6 @@ export default function ResumenView() {
         paydayWeekday,
         summaryCurrency,
         prefilteredMonthTransactions,
-        payCadence ?? "monthly",
       ),
     [
       transactions,
@@ -161,7 +159,6 @@ export default function ResumenView() {
       selectedMonth,
       monthReferenceToday,
       paydayWeekday,
-      payCadence,
       summaryCurrency,
       prefilteredMonthTransactions,
     ],
@@ -184,7 +181,6 @@ export default function ResumenView() {
           currency: summaryCurrency,
           referenceToday: monthReferenceToday,
           prefilteredMonthTransactions,
-          payCadence: payCadence ?? "monthly",
         },
       ),
     [
@@ -192,10 +188,39 @@ export default function ResumenView() {
       categories,
       selectedMonth,
       paydayWeekday,
-      payCadence,
       summaryCurrency,
       monthReferenceToday,
       prefilteredMonthTransactions,
+    ],
+  );
+
+  const budgetProgress = useMemo(
+    () =>
+      buildBudgetProgress(
+        transactions,
+        categories,
+        budgets,
+        selectedMonth,
+        paydayWeekday,
+        summaryCurrency,
+        {
+          // Default pay-weeks; pass "calendarMonth" when Fase M wires payCadence.
+          periodMode: "payWeeks",
+          referenceToday: monthReferenceToday,
+          prefilteredMonthTransactions,
+          weeks: summary.weeks,
+        },
+      ),
+    [
+      transactions,
+      categories,
+      budgets,
+      selectedMonth,
+      paydayWeekday,
+      summaryCurrency,
+      monthReferenceToday,
+      prefilteredMonthTransactions,
+      summary.weeks,
     ],
   );
 
@@ -209,7 +234,6 @@ export default function ResumenView() {
         paydayWeekday,
         summaryCurrency,
         prefilteredMonthTransactions,
-        payCadence ?? "monthly",
       ),
     [
       transactions,
@@ -217,7 +241,6 @@ export default function ResumenView() {
       budgets,
       selectedMonth,
       paydayWeekday,
-      payCadence,
       summaryCurrency,
       prefilteredMonthTransactions,
     ],
@@ -233,14 +256,12 @@ export default function ResumenView() {
         0.2,
         summaryCurrency,
         prefilteredMonthTransactions,
-        payCadence ?? "monthly",
       ),
     [
       transactions,
       categories,
       selectedMonth,
       paydayWeekday,
-      payCadence,
       summaryCurrency,
       prefilteredMonthTransactions,
     ],
@@ -264,7 +285,6 @@ export default function ResumenView() {
       referenceToday: monthReferenceToday,
       paydayWeekday,
       currency: otherCurrency,
-      payCadence: payCadence ?? "monthly",
     }).filter((tx) => !isTransferLeg(tx));
 
     if (otherMonthTx.length === 0) return null;
@@ -292,7 +312,6 @@ export default function ResumenView() {
     selectedMonth,
     monthReferenceToday,
     paydayWeekday,
-    payCadence,
   ]);
 
   const focusedWeek = useMemo(() => {
@@ -304,21 +323,27 @@ export default function ResumenView() {
     return summary.weeks.find((week) => week.isCurrent) ?? summary.weeks[0];
   }, [summary.weeks, selectedWeekIso]);
 
-  // Slice from the same pay-week month set (already projected); do not
-  // re-scan the full ledger with filterByPayWeek.
   const weekTransactions = useMemo(() => {
     if (!focusedWeek) return [];
-    return prefilteredMonthTransactions
-      .filter((tx) => {
-        const date = parseISO(tx.date);
-        return isWithinInterval(date, {
-          start: focusedWeek.start,
-          end: focusedWeek.end,
-        });
-      })
+    return filterByPayWeek(
+      transactions,
+      focusedWeek.start,
+      focusedWeek.end,
+      summaryCurrency,
+      paydayWeekday,
+    )
+      .filter((tx) =>
+        accountFilter === "all" ? true : tx.accountId === accountFilter,
+      )
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [prefilteredMonthTransactions, focusedWeek]);
+  }, [
+    transactions,
+    focusedWeek,
+    summaryCurrency,
+    paydayWeekday,
+    accountFilter,
+  ]);
 
   const categoriesById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -455,10 +480,9 @@ export default function ResumenView() {
         ) : null}
       </section>
 
-      <WeekBreakdown
-        summary={summary}
-        isCollapsible={(payCadence ?? "monthly") === "monthly"}
-      />
+      <WeekBreakdown summary={summary} />
+
+      <BudgetProgress rows={budgetProgress} currency={summaryCurrency} />
 
       {installmentDebt.length > 0 ? (
         <section
@@ -628,9 +652,6 @@ export default function ResumenView() {
         <MonthComparisonChart
           transactions={transactions}
           monthKey={selectedMonth}
-          prefilteredMonthTransactions={
-            accountFilter === "all" ? prefilteredMonthTransactions : undefined
-          }
         />
 
         <div className="ledger-panel p-4 min-[880px]:p-5">

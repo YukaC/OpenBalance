@@ -6,6 +6,7 @@ import {
   PAYDAY_NOTIFICATION_BODY_MONTHLY,
   PAYDAY_NOTIFICATION_BODY_WEEKLY,
   shouldShowPaydayLoadReminder,
+  syncNativePaydayNotification,
 } from "@/lib/payday-reminder";
 import { useFinanceStore } from "@/store/finance-store";
 
@@ -53,6 +54,15 @@ export function PaydayLoadBanner() {
       new Date(),
     );
   }, [hydrated, isDismissed, transactions, reminderProfile]);
+
+  // Keep native weekly schedule in sync even if Config is never opened (E3).
+  useEffect(() => {
+    if (!hydrated) return;
+    void syncNativePaydayNotification(
+      paydayWeekday,
+      Boolean(shouldRemindPaydayLoad),
+    );
+  }, [hydrated, paydayWeekday, shouldRemindPaydayLoad]);
 
   useEffect(() => {
     if (!shouldShow) return;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildBudgetProgress,
   buildMonthSummary,
   computeAccountBalance,
   computeInstallmentDebt,
@@ -267,6 +268,102 @@ describe("findBudgetAlerts / findCategorySpendAlerts", () => {
     assert.equal(spendAlerts.length, 1);
     assert.equal(spendAlerts[0].currentAmount, 90);
     assert.equal(spendAlerts[0].previousAmount, 50);
+  });
+});
+
+describe("buildBudgetProgress", () => {
+  it("builds month progress with pay-week spend breakdown", () => {
+    // July 2026 payday sábado: week1 Dom 28 Jun–Sáb 4 Jul, week2 Dom 5–Sáb 11 Jul.
+    const txs = [
+      makeTx({
+        id: "w1",
+        type: "gasto",
+        amount: 40,
+        month: "2026-07",
+        date: "2026-07-03",
+        categoryId: "cat-comida",
+      }),
+      makeTx({
+        id: "w2",
+        type: "gasto",
+        amount: 60,
+        month: "2026-07",
+        date: "2026-07-10",
+        categoryId: "cat-comida",
+      }),
+    ];
+    const budgets: Budget[] = [
+      {
+        id: "b1",
+        categoryId: "cat-comida",
+        month: "2026-07",
+        amountLimit: 200,
+        deletedAt: null,
+      },
+    ];
+
+    const rows = buildBudgetProgress(
+      txs,
+      categories,
+      budgets,
+      "2026-07",
+      "sabado",
+      "ARS",
+      { referenceToday: new Date(2026, 6, 16) },
+    );
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].spent, 100);
+    assert.equal(rows[0].percentUsed, 50);
+    assert.equal(rows[0].level, "ok");
+    assert.equal(rows[0].periodMode, "payWeeks");
+    assert.ok(rows[0].weeks.length >= 2);
+    assert.equal(
+      rows[0].weeks.find((week) => week.index === 1)?.spent,
+      40,
+    );
+    assert.equal(
+      rows[0].weeks.find((week) => week.index === 2)?.spent,
+      60,
+    );
+  });
+
+  it("supports calendarMonth mode without week slices (Fase M ready)", () => {
+    const txs = [
+      makeTx({
+        id: "cal",
+        type: "gasto",
+        amount: 80,
+        month: "2026-07",
+        date: "2026-07-15",
+        categoryId: "cat-comida",
+      }),
+    ];
+    const budgets: Budget[] = [
+      {
+        id: "b1",
+        categoryId: "cat-comida",
+        month: "2026-07",
+        amountLimit: 100,
+        deletedAt: null,
+      },
+    ];
+
+    const rows = buildBudgetProgress(
+      txs,
+      categories,
+      budgets,
+      "2026-07",
+      "viernes",
+      "ARS",
+      { periodMode: "calendarMonth" },
+    );
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].spent, 80);
+    assert.equal(rows[0].level, "warning");
+    assert.equal(rows[0].periodMode, "calendarMonth");
+    assert.deepEqual(rows[0].weeks, []);
   });
 });
 

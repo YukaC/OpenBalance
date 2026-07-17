@@ -1,12 +1,5 @@
 import { format, isWithinInterval, parseISO } from "date-fns";
-import type {
-  Account,
-  Budget,
-  Category,
-  PayCadence,
-  Transaction,
-  Weekday,
-} from "./types";
+import type { Account, Budget, Category, Transaction, Weekday } from "./types";
 import {
   formatMonthName,
   getAppToday,
@@ -409,23 +402,16 @@ export function buildMonthSummary(
    * When provided, skips re-scanning the full ledger for weeks + category breakdown.
    */
   prefilteredMonthTransactions?: Transaction[],
-  /**
-   * monthly → calendar-month totals (weeks remain as secondary metadata).
-   * weekly → pay-week totals (legacy). Default weekly for callers that omit it.
-   */
-  payCadence: PayCadence = "weekly",
 ): MonthSummary {
   const monthTx =
     prefilteredMonthTransactions ??
-    (payCadence === "monthly"
-      ? filterByMonth(transactions, monthKey, currency, paydayWeekday)
-      : filterByMonthPayWeeks(
-          transactions,
-          monthKey,
-          referenceToday,
-          paydayWeekday,
-          currency,
-        ));
+    filterByMonthPayWeeks(
+      transactions,
+      monthKey,
+      referenceToday,
+      paydayWeekday,
+      currency,
+    );
 
   const weeks = getMonthWorkWeeks(
     monthKey,
@@ -457,28 +443,19 @@ export function buildMonthSummary(
     };
   });
 
-  // Monthly: hero totals follow calendar monthTx. Weekly: match pay weeks shown.
-  const income =
-    payCadence === "monthly"
-      ? sumByType(monthTx, "ingreso", currency)
-      : weeks.reduce((total, week) => total + week.income, 0);
-  const expense =
-    payCadence === "monthly"
-      ? sumByType(monthTx, "gasto", currency)
-      : weeks.reduce((total, week) => total + week.expense, 0);
+  // Month hero balance must match the pay weeks shown (not calendar-month clamp).
+  const income = weeks.reduce((total, week) => total + week.income, 0);
+  const expense = weeks.reduce((total, week) => total + week.expense, 0);
   const balance = income - expense;
 
   const prevKey = previousMonthKey(monthKey);
-  const prevTx =
-    payCadence === "monthly"
-      ? filterByMonth(transactions, prevKey, currency, paydayWeekday)
-      : filterByMonthPayWeeks(
-          transactions,
-          prevKey,
-          referenceToday,
-          paydayWeekday,
-          currency,
-        );
+  const prevTx = filterByMonthPayWeeks(
+    transactions,
+    prevKey,
+    referenceToday,
+    paydayWeekday,
+    currency,
+  );
   const prevBalance =
     sumByType(prevTx, "ingreso", currency) - sumByType(prevTx, "gasto", currency);
 
@@ -527,7 +504,7 @@ const HORMIGA_MIN_OCCURRENCES = 3;
 const HORMIGA_MIN_TOTAL = 100_000;
 
 /**
- * Hormiga category that repeats often and drains >100k within the month window.
+ * Hormiga category that repeats often and drains >100k within the pay-week month.
  */
 export function getHormigaDrainAlert(
   transactions: Transaction[],
@@ -539,14 +516,12 @@ export function getHormigaDrainAlert(
     minTotal?: number;
     currency?: "ARS" | "USD";
     referenceToday?: Date;
-    /** I1 light: optional prefiltered month txs. */
+    /** I1 light: optional prefiltered month pay-week txs. */
     prefilteredMonthTransactions?: Transaction[];
-    payCadence?: PayCadence;
   },
 ): HormigaDrainAlert | null {
   const minOccurrences = opts?.minOccurrences ?? HORMIGA_MIN_OCCURRENCES;
   const minTotal = opts?.minTotal ?? HORMIGA_MIN_TOTAL;
-  const payCadence = opts?.payCadence ?? "weekly";
   const activeCategories = categories.filter(isActive);
   const categoryById = new Map(
     activeCategories.map((category) => [category.id, category]),
@@ -556,15 +531,13 @@ export function getHormigaDrainAlert(
 
   const monthTx =
     opts?.prefilteredMonthTransactions ??
-    (payCadence === "monthly"
-      ? filterByMonth(transactions, monthKey, opts?.currency, paydayWeekday)
-      : filterByMonthPayWeeks(
-          transactions,
-          monthKey,
-          opts?.referenceToday ?? getAppToday(),
-          paydayWeekday,
-          opts?.currency,
-        ));
+    filterByMonthPayWeeks(
+      transactions,
+      monthKey,
+      opts?.referenceToday ?? getAppToday(),
+      paydayWeekday,
+      opts?.currency,
+    );
 
   for (const item of monthTx) {
     if (item.type !== "gasto" || !item.categoryId) continue;
@@ -607,7 +580,7 @@ export interface CategorySpendAlert {
 }
 
 /**
- * Expense totals by category for a month's window (pay weeks or calendar).
+ * Expense totals by category for a month's pay weeks.
  */
 export function sumExpenseByCategory(
   transactions: Transaction[],
@@ -615,22 +588,19 @@ export function sumExpenseByCategory(
   paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
   referenceToday: Date = getAppToday(),
-  /** I1 light: optional prefiltered month txs. */
+  /** I1 light: optional prefiltered month pay-week txs. */
   prefilteredMonthTransactions?: Transaction[],
-  payCadence: PayCadence = "weekly",
 ): Map<string, number> {
   const totals = new Map<string, number>();
   const monthTx =
     prefilteredMonthTransactions ??
-    (payCadence === "monthly"
-      ? filterByMonth(transactions, monthKey, currency, paydayWeekday)
-      : filterByMonthPayWeeks(
-          transactions,
-          monthKey,
-          referenceToday,
-          paydayWeekday,
-          currency,
-        ));
+    filterByMonthPayWeeks(
+      transactions,
+      monthKey,
+      referenceToday,
+      paydayWeekday,
+      currency,
+    );
   for (const item of monthTx) {
     if (item.type !== "gasto" || !item.categoryId) continue;
     totals.set(
@@ -653,7 +623,6 @@ export function findCategorySpendAlerts(
   threshold = 0.2,
   currency?: "ARS" | "USD",
   prefilteredMonthTransactions?: Transaction[],
-  payCadence: PayCadence = "weekly",
 ): CategorySpendAlert[] {
   const currentByCategory = sumExpenseByCategory(
     transactions,
@@ -662,16 +631,12 @@ export function findCategorySpendAlerts(
     currency,
     getAppToday(),
     prefilteredMonthTransactions,
-    payCadence,
   );
   const previousByCategory = sumExpenseByCategory(
     transactions,
     previousMonthKey(monthKey),
     paydayWeekday,
     currency,
-    getAppToday(),
-    undefined,
-    payCadence,
   );
   const categoryById = new Map(
     categories.filter(isActive).map((category) => [category.id, category]),
@@ -711,8 +676,173 @@ export interface BudgetAlert {
 }
 
 /**
+ * How budget spend is measured for the month.
+ * Additive for Fase M: pass `"calendarMonth"` when payCadence is monthly
+ * without reading UserProfile here.
+ */
+export type BudgetPeriodMode = "payWeeks" | "calendarMonth";
+
+export type BudgetProgressLevel = "ok" | BudgetAlertLevel;
+
+export interface BudgetWeekSpend {
+  index: number;
+  label: string;
+  weekIso: string;
+  spent: number;
+}
+
+export interface BudgetProgressRow {
+  budget: Budget;
+  category: Category;
+  spent: number;
+  amountLimit: number;
+  ratio: number;
+  percentUsed: number;
+  level: BudgetProgressLevel;
+  periodMode: BudgetPeriodMode;
+  /** Per pay-week spend; empty when `periodMode === "calendarMonth"`. */
+  weeks: BudgetWeekSpend[];
+}
+
+function resolveBudgetMonthTransactions(
+  transactions: Transaction[],
+  monthKey: string,
+  paydayWeekday: Weekday,
+  currency: "ARS" | "USD" | undefined,
+  periodMode: BudgetPeriodMode,
+  referenceToday: Date,
+  prefilteredMonthTransactions?: Transaction[],
+): Transaction[] {
+  if (prefilteredMonthTransactions) return prefilteredMonthTransactions;
+  if (periodMode === "calendarMonth") {
+    return filterByMonth(transactions, monthKey, currency, paydayWeekday);
+  }
+  return filterByMonthPayWeeks(
+    transactions,
+    monthKey,
+    referenceToday,
+    paydayWeekday,
+    currency,
+  );
+}
+
+function sumCategorySpendInRange(
+  transactions: Transaction[],
+  categoryId: string,
+  weekStart: Date,
+  weekEnd: Date,
+): number {
+  let total = 0;
+  for (const item of transactions) {
+    if (!isActive(item)) continue;
+    if (isTransferLeg(item)) continue;
+    if (item.type !== "gasto" || item.categoryId !== categoryId) continue;
+    const date = parseISO(item.date);
+    if (!isWithinInterval(date, { start: weekStart, end: weekEnd })) continue;
+    total += item.amount;
+  }
+  return total;
+}
+
+/**
+ * Progress bars for active month budgets, with optional pay-week breakdown.
+ * Default `periodMode` is `"payWeeks"` (current product model). Pass
+ * `"calendarMonth"` when Fase M enables monthly cadence — no UserProfile coupling.
+ */
+export function buildBudgetProgress(
+  transactions: Transaction[],
+  categories: Category[],
+  budgets: Budget[],
+  monthKey: string,
+  paydayWeekday: Weekday = "viernes",
+  currency?: "ARS" | "USD",
+  options?: {
+    periodMode?: BudgetPeriodMode;
+    referenceToday?: Date;
+    prefilteredMonthTransactions?: Transaction[];
+    /** Reuse `buildMonthSummary.weeks` when available (payWeeks mode). */
+    weeks?: Array<
+      Pick<MonthWeekSlice, "index" | "label" | "weekIso" | "start" | "end">
+    >;
+    /** Default true for payWeeks; alerts can skip week slices. */
+    includeWeekBreakdown?: boolean;
+  },
+): BudgetProgressRow[] {
+  const periodMode = options?.periodMode ?? "payWeeks";
+  const referenceToday = options?.referenceToday ?? getAppToday();
+  const shouldIncludeWeekBreakdown =
+    options?.includeWeekBreakdown ?? periodMode === "payWeeks";
+  const monthBudgets = budgets.filter(
+    (budget) => isActive(budget) && budget.month === monthKey,
+  );
+  if (monthBudgets.length === 0) return [];
+
+  const monthTx = resolveBudgetMonthTransactions(
+    transactions,
+    monthKey,
+    paydayWeekday,
+    currency,
+    periodMode,
+    referenceToday,
+    options?.prefilteredMonthTransactions,
+  );
+
+  const spentByCategory = new Map<string, number>();
+  for (const item of monthTx) {
+    if (isTransferLeg(item)) continue;
+    if (item.type !== "gasto" || !item.categoryId) continue;
+    spentByCategory.set(
+      item.categoryId,
+      (spentByCategory.get(item.categoryId) ?? 0) + item.amount,
+    );
+  }
+
+  const weekSlices =
+    periodMode === "payWeeks" && shouldIncludeWeekBreakdown
+      ? (options?.weeks ??
+        getMonthWorkWeeks(monthKey, referenceToday, paydayWeekday))
+      : [];
+  const categoryById = new Map(
+    categories.filter(isActive).map((category) => [category.id, category]),
+  );
+
+  const rows: BudgetProgressRow[] = [];
+  for (const budget of monthBudgets) {
+    if (budget.amountLimit <= 0) continue;
+    const category = categoryById.get(budget.categoryId);
+    if (!category) continue;
+    const spent = spentByCategory.get(budget.categoryId) ?? 0;
+    const ratio = spent / budget.amountLimit;
+    const weeks: BudgetWeekSpend[] = weekSlices.map((week) => ({
+      index: week.index,
+      label: week.label,
+      weekIso: week.weekIso,
+      spent: sumCategorySpendInRange(
+        monthTx,
+        budget.categoryId,
+        week.start,
+        week.end,
+      ),
+    }));
+
+    rows.push({
+      budget,
+      category,
+      spent,
+      amountLimit: budget.amountLimit,
+      ratio,
+      percentUsed: Math.round(ratio * 100),
+      level: ratio >= 1 ? "exceeded" : ratio >= 0.8 ? "warning" : "ok",
+      periodMode,
+      weeks,
+    });
+  }
+
+  return rows.sort((a, b) => b.ratio - a.ratio);
+}
+
+/**
  * Budgets for the month where spend is ≥ 80% (warning) or ≥ 100% (exceeded).
- * Uses calendar month when payCadence is monthly (M7).
  */
 export function findBudgetAlerts(
   transactions: Transaction[],
@@ -722,44 +852,32 @@ export function findBudgetAlerts(
   paydayWeekday: Weekday = "viernes",
   currency?: "ARS" | "USD",
   prefilteredMonthTransactions?: Transaction[],
-  payCadence: PayCadence = "weekly",
+  /** Optional; defaults to pay-weeks. Ready for Fase M calendar mode. */
+  periodMode: BudgetPeriodMode = "payWeeks",
 ): BudgetAlert[] {
-  const monthBudgets = budgets.filter(
-    (budget) => isActive(budget) && budget.month === monthKey,
-  );
-  if (monthBudgets.length === 0) return [];
-
-  const spentByCategory = sumExpenseByCategory(
+  const progress = buildBudgetProgress(
     transactions,
+    categories,
+    budgets,
     monthKey,
     paydayWeekday,
     currency,
-    getAppToday(),
-    prefilteredMonthTransactions,
-    payCadence,
-  );
-  const categoryById = new Map(
-    categories.filter(isActive).map((category) => [category.id, category]),
+    {
+      periodMode,
+      prefilteredMonthTransactions,
+      includeWeekBreakdown: false,
+    },
   );
 
-  const alerts: BudgetAlert[] = [];
-  for (const budget of monthBudgets) {
-    if (budget.amountLimit <= 0) continue;
-    const category = categoryById.get(budget.categoryId);
-    if (!category) continue;
-    const spent = spentByCategory.get(budget.categoryId) ?? 0;
-    const ratio = spent / budget.amountLimit;
-    if (ratio < 0.8) continue;
-    alerts.push({
-      budget,
-      category,
-      spent,
-      amountLimit: budget.amountLimit,
-      ratio,
-      percentUsed: Math.round(ratio * 100),
-      level: ratio >= 1 ? "exceeded" : "warning",
-    });
-  }
-
-  return alerts.sort((a, b) => b.ratio - a.ratio);
+  return progress
+    .filter((row) => row.level !== "ok")
+    .map((row) => ({
+      budget: row.budget,
+      category: row.category,
+      spent: row.spent,
+      amountLimit: row.amountLimit,
+      ratio: row.ratio,
+      percentUsed: row.percentUsed,
+      level: row.level,
+    }));
 }

@@ -246,6 +246,8 @@ export async function syncNativePaydayNotification(
           schedule: {
             on: scheduleOn,
             allowWhileIdle: true,
+            // Weekly `on.weekday` already recurs; repeats keeps iOS/Android aligned.
+            repeats: true,
           },
           extra: {
             deepLink: "openbalance://income",
@@ -257,5 +259,26 @@ export async function syncNativePaydayNotification(
     });
   } catch {
     /* plugin unavailable — keep in-app banner / web notifications */
+  }
+}
+
+/**
+ * Read native display permission without prompting (E3 / Config UI).
+ * Returns null on web or when the plugin is unavailable.
+ */
+export async function getNativePaydayPermission(): Promise<
+  "granted" | "denied" | "prompt" | null
+> {
+  if (!isRunningInNativeApp()) return null;
+  try {
+    const { LocalNotifications } = await import(
+      "@capacitor/local-notifications"
+    );
+    const current = await LocalNotifications.checkPermissions();
+    if (current.display === "granted") return "granted";
+    if (current.display === "denied") return "denied";
+    return "prompt";
+  } catch {
+    return null;
   }
 }
