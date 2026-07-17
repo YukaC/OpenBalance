@@ -172,7 +172,7 @@ PR: `feat/sync-status-and-legacy-migrate` (+ `fix/sync-clock-skew-and-echo` para
 - **Estado (2026-07-16):**
   - **SSR (Vercel):** `src/middleware.ts` genera nonce por request; `script-src` producción = `'self' 'nonce-…' 'strict-dynamic'` — **sin** `unsafe-inline` ni `unsafe-eval`. Layout lee `x-nonce` y lo aplica al script de tema. `style-src` sigue con `unsafe-inline` (Tailwind).
   - **Export Capacitor:** middleware no corre (`build-mobile` lo aparta); `next.config` mantiene CSP estática con `unsafe-inline` en scripts.
-  - **Partial win documentado:** `unsafe-inline` eliminado de `script-src` en el path SSR; no en export estático ni en `style-src`.
+  - **Partial win documentado:** `unsafe-inline` eliminado de `script-src` en el path SSR; no en export estático ni en `style-src`. Estado operativo + Capacitor: `docs/DEPLOY.md` §6 y `docs/MOBILE.md`.
 
 ### H10. Migraciones: pasar de `db:push` a `db:generate` + `db:migrate` en producción
 - `docs/DEPLOY.md` documenta `db:push` como flujo día a día contra Neon en prod. `drizzle-kit push` puede pedir un diff destructivo (drop+recreate) en cambios de columna con datos existentes — el riesgo de pérdida de datos real más alto del roadmap operativo.
@@ -644,7 +644,7 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 | H6 `AUTH_SECRET` | DONE | `assertAuthSecret` |
 | H7 Logs sync | DONE | `logError` sin payload |
 | H8 `/api/health` | DONE | Route + ping DB |
-| H9 CSP strict | PARTIAL | Prod sin `unsafe-eval`; sigue `unsafe-inline` |
+| H9 CSP strict | PARTIAL | SSR nonce OK; `style-src` + export Capacitor `unsafe-inline` documentados en DEPLOY/MOBILE |
 | H10 Migraciones prod | DONE | `DEPLOY.md` reserva `db:push` a local |
 
 ### Fase S — Cifrado

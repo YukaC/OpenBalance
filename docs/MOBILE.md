@@ -19,7 +19,9 @@ Empaquetar la web estática en Android/iOS con Capacitor. El backend (auth/sync)
 | `AUTH_URL` | (servidor) URL canónica de la app web Auth.js, ej. `https://tu-app.vercel.app` |
 | `AUTH_SECRET` | (servidor) secreto JWT / cookies Auth.js |
 
-El CSP web (`connect-src` en `next.config.ts`) incluye `NEXT_PUBLIC_API_BASE_URL` cuando está definida. Dentro de Capacitor el WebView carga archivos locales; el CSP de Next no aplica ahí.
+`NEXT_PUBLIC_API_BASE_URL` también se suma a CSP `connect-src` (SSR middleware + static-export headers in `next.config.ts`).
+
+**H9 / Capacitor CSP:** `pnpm build:mobile` stashes `src/middleware.ts`, so there are **no** per-request script nonces on the native WebView path. The static export CSP keeps `script-src 'unsafe-inline'` (and `style-src 'unsafe-inline'`) on purpose — see [DEPLOY.md §6](./DEPLOY.md#6-content-security-policy-h9). Next `headers()` from the export build also do not apply inside a `file://` / Capacitor WebView; treat that CSP as documentation of the intended policy if you later serve `out/` over HTTP.
 
 ## Build + sync (C2)
 

@@ -122,6 +122,19 @@ Dirty-only flush on tab hide / page leave (`visibilitychange` / `pagehide` + `ke
 
 `.github/workflows/ci.yml` runs test, typecheck, lint, and build **without** a real database. Build must succeed with unset `DATABASE_URL` (lazy DB client). CI does **not** run `db:migrate` / `db:push`.
 
+## 6. Content Security Policy (H9)
+
+Status: **partial** — production SSR scripts are nonce-based; remaining `unsafe-inline` is intentional.
+
+| Surface | `script-src` | `style-src` |
+|---------|--------------|-------------|
+| **SSR (Vercel)** | `'self' 'nonce-…' 'strict-dynamic'` via `src/middleware.ts` — **no** `unsafe-inline` / `unsafe-eval` in production | `'self' 'unsafe-inline'` (Tailwind / runtime styles) |
+| **Static export / Capacitor** | `'self' 'unsafe-inline'` in `next.config.ts` — middleware is stashed by `build-mobile` and cannot issue per-request nonces | same `unsafe-inline` for styles |
+
+Do **not** add a CSP header in `next.config.ts` for the SSR path: duplicate CSP headers are AND-combined and would break the nonce policy from middleware.
+
+Removing `style-src 'unsafe-inline'` without a hash/nonce strategy for Tailwind (and any runtime style injection) would break SSR — left as a known residual until that work is scoped separately. Capacitor details: [MOBILE.md](./MOBILE.md).
+
 ## Related
 
 - [MOBILE.md](./MOBILE.md) — Capacitor / static export
