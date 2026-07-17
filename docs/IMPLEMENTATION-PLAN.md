@@ -9,7 +9,9 @@ Principios: **DRY**, **KISS**, sin dependencias nuevas sin preguntar, lógica de
 
 ## 1. Qué es el proyecto
 
-OpenBalance es una app de finanzas personales para quien **cobra por semana** y **decide por mes** (freelancers, changas, trabajo informal). El nicho es claro: la mayoría de apps asumen sueldo mensual fijo; acá la unidad natural es la **semana de cobro** y el mes es el marco de resumen.
+OpenBalance es una app de finanzas personales **mensual primero**: el mes calendario es el marco de decisión (ingresos, gastos, saldo, presupuesto). Quien cobra por semana (freelancers, changas, trabajo informal) puede usar un **modo cobro semanal** opcional — pay-weeks ancladas al día de cobro — sin perder el default mensual para el usuario mayoritario de sueldo fijo.
+
+**Hoy en código** el resumen principal sigue particionado por semanas de pago. **Fase M** invierte el default (`payCadence: "monthly"`) y deja el camino semanal como opción explícita; hasta mergear M, el posicionamiento de producto ya apunta ahí aunque la UI aún no ofrezca el switch.
 
 ### Stack real (evolucionó del plan original)
 
@@ -327,7 +329,7 @@ PR: `feat/account-balances-and-transfers`
 
 ## Fase M — Ciclo mensual / cobro semanal configurable (P1 producto)
 
-> El posicionamiento actual (`§1`) asume que **todo** usuario cobra por semana y decide por mes. Es un buen diferencial de nicho (freelancers/changas), pero deja afuera al usuario mayoritario que cobra sueldo mensual fijo y para quien la semana de pago no significa nada. Un switch de cadencia en Configuración, **mensual por default**, resuelve esto sin perder el diferencial semanal para quien lo necesita.
+> El posicionamiento de producto (`§1` + `README`) ya es **mensual primero, semanal opcional**. Falta el switch de cadencia en código: hoy el resumen sigue en pay-weeks para todos. Un selector en Configuración, **mensual por default**, alinea la app con ese posicionamiento sin perder el diferencial semanal para freelancers/changas.
 >
 > **Hallazgo clave explorando el código:** el camino de filtrado por mes calendario (`filterByMonth`) **ya existe** en `summaries.ts` — hoy se usa solo como fallback cuando `getMonthWorkWeeks` no devuelve semanas. La Fase M no inventa un modelo temporal nuevo; promueve ese camino a primera clase cuando `payCadence === "monthly"` y deja el modelo de pay-week intacto para `"weekly"`. Esto mantiene el diff acotado (DRY/KISS) en vez de bifurcar toda la capa de dominio.
 
@@ -368,7 +370,7 @@ PR: `feat/account-balances-and-transfers`
 
 ### Entregable
 PR: `feat/pay-cadence-monthly-default` (M1, M2, M3) + `feat/pay-cadence-ui-and-reminders` (M4, M5, M6)  
-Docs: `README.md` — reescribir `§1` (posicionamiento) para reflejar "mensual por default, semanal opcional" en vez de "cobra por semana" como única premisa.
+Docs: `README.md` + `§1` alineados a "mensual primero, semanal opcional"; falta el switch en código.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "OpenBalance",
   "short_name": "OpenBalance",
-  "description": "OpenBalance — finanzas personales, resumen semanal y mensual",
+  "description": "OpenBalance — finanzas personales, resumen mensual primero (modo cobro semanal opcional)",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#e6e2db",
