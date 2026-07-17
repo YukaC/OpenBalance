@@ -3,9 +3,13 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   chunkSyncChangesForKeepalive,
   estimateSyncRequestBodyBytes,
+  getClockSkewMs,
   hasPendingLocalChanges,
+  isChangedSince,
   KEEPALIVE_MAX_BODY_BYTES,
   pushPullSync,
+  resetSyncClientClockStateForTests,
+  updateClockSkewFromServerTime,
 } from "./sync-client";
 import { useFinanceStore } from "@/store/finance-store";
 import type { SyncChanges } from "@/store/sync-actions";
@@ -20,7 +24,9 @@ function makeCleanProfile() {
     name: "Test",
     email: "test@example.com",
     defaultCurrency: "ARS" as const,
+    payCadence: "weekly" as const,
     paydayWeekday: "viernes" as const,
+    paydayDayOfMonth: 1,
     initials: "T",
     isSetupComplete: true,
     defaultAccountId: "acc-principal",
@@ -30,8 +36,26 @@ function makeCleanProfile() {
   };
 }
 
+/**
+ * Measure clockSkewMs as if Date.now() were `clientNowIso` when the server
+ * returned `serverTimeIso` (positive skew ⇒ client clock behind server).
+ */
+function simulateClockSkewFromSync(
+  serverTimeIso: string,
+  clientNowIso: string,
+): void {
+  const realNow = Date.now;
+  Date.now = () => Date.parse(clientNowIso);
+  try {
+    updateClockSkewFromServerTime(serverTimeIso);
+  } finally {
+    Date.now = realNow;
+  }
+}
+
 /** Empty collections with timestamps so nothing looks dirty vs lastSyncedAt. */
 function resetToCleanSyncedState() {
+  resetSyncClientClockStateForTests();
   useFinanceStore.setState({
     profile: makeCleanProfile(),
     categories: [],
@@ -51,6 +75,33 @@ function resetToCleanSyncedState() {
     lastSyncedAt: CLEAN_SYNCED_AT,
   });
   globalThis.localStorage.clear();
+}
+
+function makeTransaction(overrides: {
+  id: string;
+  title: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}) {
+  return {
+    id: overrides.id,
+    type: "gasto" as const,
+    amount: 10,
+    currency: "ARS" as const,
+    date: "2026-06-01",
+    method: "efectivo" as const,
+    categoryId: null,
+    incomeSourceId: null,
+    note: "",
+    weekIso: "2026-W23",
+    month: "2026-06",
+    origin: "manual" as const,
+    title: overrides.title,
+    isAutoCategorized: false,
+    isFixed: false,
+    deletedAt: overrides.deletedAt ?? null,
+    updatedAt: overrides.updatedAt,
+  };
 }
 
 function makeDirtyTransaction(id: string, note = "") {
@@ -189,6 +240,37 @@ describe("hasPendingLocalChanges", () => {
 
     assert.equal(hasPendingLocalChanges(), true);
   });
+
+  it("marks pending when client clock is behind server (A5 clock skew)", () => {
+    const clientNowAtSync = "2026-07-17T12:00:00.000Z";
+    const serverTime = "2026-07-17T12:05:00.000Z";
+    const clientEditAt = "2026-07-17T12:00:05.000Z";
+
+    simulateClockSkewFromSync(serverTime, clientNowAtSync);
+    assert.ok(
+      getClockSkewMs() > 0,
+      "skew should be positive when client is behind",
+    );
+
+    const dirtyTx = makeTransaction({
+      id: "tx-skew-behind",
+      title: "Behind clock edit",
+      updatedAt: clientEditAt,
+    });
+
+    useFinanceStore.setState({
+      lastSyncedAt: serverTime,
+      transactions: [dirtyTx],
+    });
+
+    assert.equal(
+      isChangedSince(dirtyTx, serverTime, 0),
+      false,
+      "without skew the behind-clock edit must look stale",
+    );
+    assert.equal(isChangedSince(dirtyTx, serverTime), true);
+    assert.equal(hasPendingLocalChanges(), true);
+  });
 });
 
 describe("chunkSyncChangesForKeepalive", () => {
@@ -250,6 +332,7 @@ describe("pushPullSync", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    resetSyncClientClockStateForTests();
   });
 
   it("skips the network when navigator reports offline", async () => {
@@ -387,6 +470,54 @@ describe("pushPullSync", () => {
       useFinanceStore.getState().lastSyncedAt,
       "2026-07-02T00:00:00.000Z",
     );
+
+    delete (globalThis as { navigator?: unknown }).navigator;
+  });
+
+  it("pushes local edits when client clock is behind server (A5)", async () => {
+    const clientNowAtSync = "2026-07-17T12:00:00.000Z";
+    const serverTime = "2026-07-17T12:05:00.000Z";
+    const clientEditAt = "2026-07-17T12:00:05.000Z";
+
+    simulateClockSkewFromSync(serverTime, clientNowAtSync);
+
+    const dirtyTx = makeTransaction({
+      id: "tx-skew-push",
+      title: "Skew push",
+      updatedAt: clientEditAt,
+    });
+
+    useFinanceStore.setState({
+      lastSyncedAt: serverTime,
+      transactions: [dirtyTx],
+    });
+
+    assert.equal(hasPendingLocalChanges(), true);
+
+    Object.defineProperty(globalThis, "navigator", {
+      value: { onLine: true },
+      configurable: true,
+    });
+
+    let pushedTransactionIds: string[] = [];
+    globalThis.fetch = (async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        changes?: { transactions?: Array<{ id: string }> };
+      };
+      pushedTransactionIds =
+        body.changes?.transactions?.map((tx) => tx.id) ?? [];
+      return new Response(
+        JSON.stringify({
+          serverTime: "2026-07-17T12:05:10.000Z",
+          changes: {},
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const result = await pushPullSync();
+    assert.equal(result.ok, true);
+    assert.deepEqual(pushedTransactionIds, ["tx-skew-push"]);
 
     delete (globalThis as { navigator?: unknown }).navigator;
   });

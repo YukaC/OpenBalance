@@ -7,6 +7,7 @@ import {
   enableBiometricUnlock,
   isBiometricHardwareAvailable,
   isBiometricUnlockEnabled,
+  syncBiometricStoredPin,
 } from "@/lib/biometric-unlock";
 import { parseTransactionsCsv, buildTransactionsCsv } from "@/lib/csv-io";
 import { isRunningInNativeApp } from "@/lib/device";
@@ -49,6 +50,8 @@ export function useConfiguracionController() {
   const accounts = useFinanceStore((s) => s.accounts);
   const updateProfile = useFinanceStore((s) => s.updateProfile);
   const setPayday = useFinanceStore((s) => s.setPayday);
+  const setPayCadence = useFinanceStore((s) => s.setPayCadence);
+  const setPaydayDayOfMonth = useFinanceStore((s) => s.setPaydayDayOfMonth);
   const resetToSeed = useFinanceStore((s) => s.resetToSeed);
   const addTransaction = useFinanceStore((s) => s.addTransaction);
   const exportBackup = useFinanceStore((s) => s.exportBackup);
@@ -65,6 +68,9 @@ export function useConfiguracionController() {
   const [currentPin, setCurrentPin] = useState("");
   const [pinMessage, setPinMessage] = useState("");
   const [pinError, setPinError] = useState("");
+  const [pinErrorField, setPinErrorField] = useState<
+    "current" | "new" | "confirm" | null
+  >(null);
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [canUseBiometric, setCanUseBiometric] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
@@ -130,11 +136,19 @@ export function useConfiguracionController() {
 
   useEffect(() => {
     if (!hydrated) return;
-    void syncNativePaydayNotification(
-      profile.paydayWeekday,
-      Boolean(profile.shouldRemindPaydayLoad),
-    );
-  }, [hydrated, profile.paydayWeekday, profile.shouldRemindPaydayLoad]);
+    void syncNativePaydayNotification({
+      payCadence: profile.payCadence ?? "monthly",
+      paydayWeekday: profile.paydayWeekday,
+      paydayDayOfMonth: profile.paydayDayOfMonth ?? 1,
+      shouldRemind: Boolean(profile.shouldRemindPaydayLoad),
+    });
+  }, [
+    hydrated,
+    profile.payCadence,
+    profile.paydayWeekday,
+    profile.paydayDayOfMonth,
+    profile.shouldRemindPaydayLoad,
+  ]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -171,10 +185,13 @@ export function useConfiguracionController() {
 
   function handleSetPayday(weekday: Weekday) {
     setPayday(weekday);
-    void syncNativePaydayNotification(
-      weekday,
-      Boolean(useFinanceStore.getState().profile.shouldRemindPaydayLoad),
-    );
+    const currentProfile = useFinanceStore.getState().profile;
+    void syncNativePaydayNotification({
+      payCadence: currentProfile.payCadence ?? "weekly",
+      paydayWeekday: weekday,
+      paydayDayOfMonth: currentProfile.paydayDayOfMonth ?? 1,
+      shouldRemind: Boolean(currentProfile.shouldRemindPaydayLoad),
+    });
   }
 
   function handleSaveName() {
@@ -375,28 +392,38 @@ export function useConfiguracionController() {
     setImportMessage(null);
   }
 
-  async function handleSavePin() {
+  function clearPinFeedback() {
     setPinError("");
+    setPinErrorField(null);
     setPinMessage("");
+  }
+
+  async function handleSavePin() {
+    clearPinFeedback();
     if (!isValidPinFormat(newPin)) {
       setPinError("El PIN debe tener entre 4 y 6 dígitos.");
+      setPinErrorField("new");
       return;
     }
     if (newPin !== confirmPin) {
       setPinError("Los PIN no coinciden.");
+      setPinErrorField("confirm");
       return;
     }
     if (pinEnabled) {
       const isCurrentValid = await verifyPin(currentPin);
       if (!isCurrentValid) {
         setPinError("PIN actual incorrecto.");
+        setPinErrorField("current");
         return;
       }
     }
     setIsSavingPin(true);
     try {
       await setPin(newPin);
-      // setPin loads session key — rewrite finance blob as ciphertext.
+      if (biometricEnabled) {
+        await syncBiometricStoredPin(newPin);
+      }
       touchFinancePersist();
       setPinEnabled(true);
       setNewPin("");
@@ -409,20 +436,20 @@ export function useConfiguracionController() {
   }
 
   async function handleDisablePin() {
-    setPinError("");
-    setPinMessage("");
+    clearPinFeedback();
     if (!isValidPinFormat(currentPin)) {
       setPinError("Ingresá el PIN actual (4–6 dígitos) para desactivarlo.");
+      setPinErrorField("current");
       return;
     }
     const didDisable = await disablePinWithVerification(currentPin);
     if (!didDisable) {
       setPinError("PIN actual incorrecto.");
+      setPinErrorField("current");
       return;
     }
     await disableBiometricUnlock();
     setBiometricEnabled(false);
-    // Session key cleared — next persist write stores plaintext.
     touchFinancePersist();
     setPinEnabled(false);
     setCurrentPin("");
@@ -432,10 +459,10 @@ export function useConfiguracionController() {
   }
 
   async function handleToggleBiometric(nextEnabled: boolean) {
-    setPinError("");
-    setPinMessage("");
+    clearPinFeedback();
     if (!pinEnabled) {
       setPinError("Activá un PIN antes de usar biometría.");
+      setPinErrorField(null);
       return;
     }
     setIsTogglingBiometric(true);
@@ -448,16 +475,19 @@ export function useConfiguracionController() {
       }
       if (!isValidPinFormat(currentPin)) {
         setPinError("Ingresá el PIN actual para activar biometría.");
+        setPinErrorField("current");
         return;
       }
       const isCurrentValid = await verifyPin(currentPin);
       if (!isCurrentValid) {
         setPinError("PIN actual incorrecto.");
+        setPinErrorField("current");
         return;
       }
       const didEnable = await enableBiometricUnlock(currentPin);
       if (!didEnable) {
         setPinError("No se pudo activar biometría en este dispositivo.");
+        setPinErrorField(null);
         return;
       }
       setBiometricEnabled(true);
@@ -483,7 +513,12 @@ export function useConfiguracionController() {
       }
     }
     updateProfile({ shouldRemindPaydayLoad: nextEnabled });
-    await syncNativePaydayNotification(profile.paydayWeekday, nextEnabled);
+    await syncNativePaydayNotification({
+      payCadence: profile.payCadence ?? "monthly",
+      paydayWeekday: profile.paydayWeekday,
+      paydayDayOfMonth: profile.paydayDayOfMonth ?? 1,
+      shouldRemind: nextEnabled,
+    });
   }
 
   return {
@@ -504,6 +539,7 @@ export function useConfiguracionController() {
     setCurrentPin,
     pinMessage,
     pinError,
+    pinErrorField,
     isSavingPin,
     canUseBiometric,
     biometricEnabled,
@@ -526,6 +562,8 @@ export function useConfiguracionController() {
     backupInputRef,
     updateProfile,
     setPayday: handleSetPayday,
+    setPayCadence,
+    setPaydayDayOfMonth,
     handleSaveName,
     handleSaveEmail,
     handleExportCsv,

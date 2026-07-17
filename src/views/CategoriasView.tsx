@@ -45,6 +45,7 @@ export default function CategoriasView() {
   const setBudget = useFinanceStore((s) => s.setBudget);
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
+  const payCadence = useFinanceStore((s) => s.profile.payCadence);
   const showToast = useToastStore((s) => s.showToast);
 
   const [name, setName] = useState("");
@@ -88,8 +89,9 @@ export default function CategoriasView() {
       getMonthTransactions(transactions, selectedMonth, {
         paydayWeekday,
         currency,
+        payCadence: payCadence ?? "monthly",
       }),
-    [transactions, selectedMonth, paydayWeekday, currency],
+    [transactions, selectedMonth, paydayWeekday, payCadence, currency],
   );
 
   const spentByCategoryId = useMemo(
@@ -101,12 +103,14 @@ export default function CategoriasView() {
         currency,
         undefined,
         prefilteredMonthTransactions,
+        payCadence ?? "monthly",
       ),
     [
       transactions,
       selectedMonth,
       paydayWeekday,
       currency,
+      payCadence,
       prefilteredMonthTransactions,
     ],
   );
