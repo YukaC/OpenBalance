@@ -30,8 +30,10 @@ const API_BASE = getApiBaseUrl();
 /**
  * Extra window so a slightly behind client clock still pushes recent edits.
  * Combined with clockSkewMs from the last serverTime.
+ * Keep this SMALL — a multi-minute window makes every recent entity look
+ * "pending" forever after a successful sync (chip stuck + sync spam).
  */
-const SKEW_TOLERANCE_MS = 5 * 60 * 1000;
+const SKEW_EPSILON_MS = 2_000;
 
 /**
  * Browsers limit keepalive request bodies (~64KB). Above this estimated JSON
@@ -77,8 +79,9 @@ export function resetSyncClientClockStateForTests(): void {
 
 /**
  * Whether a local entity should be included in the next push.
- * Adjusts client `updatedAt` by clockSkewMs and always includes entities
- * within SKEW_TOLERANCE_MS of lastSyncedAt so a behind clock cannot drop edits.
+ * Compares skew-adjusted `updatedAt` to `lastSyncedAt`.
+ * A tiny epsilon absorbs measurement noise; do NOT use a multi-minute
+ * lookback (that keeps hasPendingLocalChanges true after every sync).
  */
 export function isChangedSince(
   entity: SyncableEntity,
@@ -95,11 +98,7 @@ export function isChangedSince(
   if (Number.isNaN(updatedMs) || Number.isNaN(lastSyncedMs)) return true;
 
   const adjustedUpdatedMs = updatedMs + skewMs;
-  // Push if skew-adjusted time is after cursor, or raw time is inside tolerance.
-  return (
-    adjustedUpdatedMs > lastSyncedMs ||
-    updatedMs >= lastSyncedMs - SKEW_TOLERANCE_MS
-  );
+  return adjustedUpdatedMs > lastSyncedMs + SKEW_EPSILON_MS;
 }
 
 function collectChangedEntities<T extends SyncableEntity>(

@@ -53,6 +53,36 @@ describe("hasPendingLocalChanges", () => {
     assert.equal(hasPendingLocalChanges(), false);
   });
 
+  it("is false for entities updated just before lastSyncedAt (no multi-minute skew window)", () => {
+    // Regression: a 5-minute lookback kept the chip on "Pendiente" after every sync.
+    const justBeforeSync = "2025-12-31T23:59:30.000Z";
+    useFinanceStore.setState({
+      transactions: [
+        {
+          id: "tx-recent",
+          type: "gasto",
+          amount: 10,
+          currency: "ARS",
+          date: "2025-12-31",
+          method: "efectivo",
+          categoryId: null,
+          incomeSourceId: null,
+          note: "",
+          weekIso: "2025-W01",
+          month: "2025-12",
+          origin: "manual",
+          title: "Recent",
+          isAutoCategorized: false,
+          isFixed: false,
+          deletedAt: null,
+          updatedAt: justBeforeSync,
+        },
+      ],
+      lastSyncedAt: CLEAN_SYNCED_AT,
+    });
+    assert.equal(hasPendingLocalChanges(), false);
+  });
+
   it("is true when a transaction updatedAt is after lastSyncedAt", () => {
     useFinanceStore.setState({
       transactions: [

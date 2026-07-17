@@ -15,7 +15,13 @@ import { getApiBaseUrl } from "@/lib/auth-flags";
 export function AuthSessionProvider({ children }: { children: ReactNode }) {
   const apiBase = getApiBaseUrl();
   return (
-    <SessionProvider basePath={apiBase ? `${apiBase}/api/auth` : undefined}>
+    <SessionProvider
+      basePath={apiBase ? `${apiBase}/api/auth` : undefined}
+      // Avoid hammering /api/auth/session on every tab focus / remount.
+      refetchOnWindowFocus={false}
+      refetchWhenOffline={false}
+      refetchInterval={5 * 60}
+    >
       {children}
     </SessionProvider>
   );

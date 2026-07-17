@@ -74,6 +74,8 @@ export function SyncStatusChip({ compact = false }: SyncStatusChipProps) {
     return subscribeSyncStatus(() => {
       setIsSyncing(getIsSyncing());
       setLastError(getLastSyncError());
+      // Re-evaluate pending when a sync finishes (lastSyncedAt may already be set).
+      setHasPending(hasPendingLocalChanges());
     });
   }, []);
 
