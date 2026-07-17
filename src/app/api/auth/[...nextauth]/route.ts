@@ -1,5 +1,5 @@
 import { handlers } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 function missingAuthSecretResponse() {
   if (process.env.AUTH_SECRET?.trim()) return null;
@@ -13,13 +13,13 @@ function missingAuthSecretResponse() {
   );
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const missing = missingAuthSecretResponse();
   if (missing) return missing;
   return handlers.GET(request);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const missing = missingAuthSecretResponse();
   if (missing) return missing;
   return handlers.POST(request);
