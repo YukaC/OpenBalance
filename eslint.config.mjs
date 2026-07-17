@@ -23,6 +23,7 @@ const eslintConfig = [
       ".pnpm-store/**",
       "playwright-report/**",
       "test-results/**",
+      ".worktrees/**",
     ],
   },
 ];
