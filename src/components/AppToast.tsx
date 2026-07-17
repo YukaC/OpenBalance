@@ -53,7 +53,7 @@ export function AppToast() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-4 max-[879px]:bottom-[calc(var(--nav-h)+12px)] min-[880px]:bottom-6"
+      className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center pl-[var(--page-pad-left)] pr-[var(--page-pad-right)] max-[879px]:bottom-[calc(var(--nav-h)+12px)] min-[880px]:bottom-6"
       role="status"
       aria-live="polite"
       aria-atomic="true"

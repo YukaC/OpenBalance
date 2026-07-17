@@ -295,13 +295,13 @@ PR: `feat/android-webview-auth`
 - **Done when:** iconos PNG maskable + splash de marca en el build nativo.
 
 ### K4. Haptics en interacciones clave
-- `@capacitor/haptics` en el FAB "Nueva transacción" y confirmaciones de guardado — pulido barato de sensación nativa.
+- `@capacitor/haptics` en el FAB "Nueva transacción" y confirmaciones de guardado — pulido barato de sensación nativa. **DONE** (`native-haptics.ts`).
 
 ### K5. Safe-area izquierda/derecha
-- Hoy solo `--safe-top`/`--safe-bottom`; falta `env(safe-area-inset-left/right)` para landscape con notch/dynamic island.
+- `--safe-left`/`--safe-right` + `--page-pad-left`/`--page-pad-right` asimétricos en shell, dock, FAB, bottom sheet y pantallas de gate. **DONE**.
 
 ### K6. Deep linking (post Fase E3)
-- Sin URL scheme/intents configurados. Relevante una vez que las notificaciones nativas de día de cobro (E3) existan: tocar la notificación debería abrir directo el form de ingreso, no solo la app en Resumen.
+- Stub JS: `deep-links.ts` (`getLaunchUrl` / `appUrlOpen` / notification tap) cableado desde `AppShell` → `openbalance://income` abre form de ingreso. Intent filters nativos al versionar `/android` `/ios`.
 
 ### Entregable
 PR: `feat/capacitor-native-plugins` (K1, K2 primero — mayor impacto funcional; K3-K6 son pulido)
@@ -682,12 +682,12 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 ### Fase K — Mobile avanzado
 | Ítem | Estado | Nota |
 |------|--------|------|
-| K1 Backup nativo | PARTIAL | Share/`download` fallback; sin `@capacitor/filesystem` |
-| K2 Back button | PARTIAL | History soft-back; sin `@capacitor/app` |
-| K3 Icons/splash | PARTIAL | Manifest maskable SVG; sin PNG 192/512 ni splash plugin |
-| K4 Haptics | TODO | — |
-| K5 Safe-area L/R | PARTIAL | Vars CSS definidas; casi no aplicadas al layout |
-| K6 Deep links | TODO | — |
+| K1 Backup nativo | DONE | `@capacitor/filesystem` + `@capacitor/share`; fallback web Share/`download` |
+| K2 Back button | DONE | Soft history + `@capacitor/app` `backButton` |
+| K3 Icons/splash | DONE | PNG 192/512 + maskable; splash plugin (nativo de plataforma: partial hasta versionar `/android`) |
+| K4 Haptics | DONE | `@capacitor/haptics` en FAB + guardado (`native-haptics.ts`) |
+| K5 Safe-area L/R | DONE | `--page-pad-left/right` + dock/FAB/sheet/gates |
+| K6 Deep links | DONE | `deep-links.ts` + `AppShell` → `openbalance://income`; intents nativos: partial |
 
 ### Fase D — Saldos / transferencias
 | Ítem | Estado | Nota |

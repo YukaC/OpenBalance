@@ -127,7 +127,7 @@ Todos los imports van detrás de `isRunningInNativeApp()` + dynamic `import()` p
 | **K2 Back** | `App.addListener("backButton")`: cierra form → vuelve a Resumen → `exitApp()`. También se mantiene el soft history overlay. |
 | **K3 Splash / icons** | Splash configurado en `capacitor.config.ts`. PNGs 192/512 (+ apple-touch 180) en `public/icons/`. |
 | **K4 Haptics** | Impacto liviano al abrir FAB; success al guardar movimiento. |
-| **K5 Safe-area** | CSS `--safe-top/bottom/left/right`; `--page-pad-x` usa left/right para landscape. |
+| **K5 Safe-area** | CSS `--safe-top/bottom/left/right`; `--page-pad-left/right` asimétricos en shell, dock, FAB, sheets y pantallas de gate. |
 | **K6 Deep links** | Stub: `App.getLaunchUrl` + `appUrlOpen` + tap de notificación → `openbalance://income` abre form de ingreso. Intent filters nativos al versionar `/android` `/ios`. |
 | **E3 Payday** | `syncNativePaydayNotification` agenda aviso semanal 09:00 el día de cobro. Tap → deep link ingreso. |
 | **S4 Biometría** | Con PIN activo, toggle en Configuración. Guarda PIN local tras autenticar; el cifrado sigue siendo la clave derivada del PIN. |
