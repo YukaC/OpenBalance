@@ -7,13 +7,16 @@ import {
   formatPercentDelta,
   type CurrencyCode,
 } from "@/lib/format";
-import { filterByMonthPayWeeks, sumByType } from "@/lib/summaries";
+import { getMonthTransactions } from "@/lib/month-index";
+import { sumByType } from "@/lib/summaries";
 import type { Transaction } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 
 interface MonthComparisonChartProps {
   transactions: Transaction[];
   monthKey: string;
+  /** I1: reuse Resumen's current-month pay-week slice when available. */
+  prefilteredMonthTransactions?: Transaction[];
 }
 
 type MetricKey = "income" | "expense" | "balance";
@@ -73,6 +76,7 @@ function formatDeltaCell(
 export function MonthComparisonChart({
   transactions,
   monthKey,
+  prefilteredMonthTransactions,
 }: MonthComparisonChartProps) {
   const currency = useFinanceStore((s) => s.profile.defaultCurrency);
   const paydayWeekday = useFinanceStore((s) => s.profile.paydayWeekday);
@@ -92,20 +96,16 @@ export function MonthComparisonChart({
   }, []);
 
   const { rows, hasComparableData } = useMemo(() => {
-    const currentTx = filterByMonthPayWeeks(
-      transactions,
-      monthKey,
-      undefined,
+    const currentTx =
+      prefilteredMonthTransactions ??
+      getMonthTransactions(transactions, monthKey, {
+        paydayWeekday,
+        currency,
+      });
+    const previousTx = getMonthTransactions(transactions, prevKey, {
       paydayWeekday,
       currency,
-    );
-    const previousTx = filterByMonthPayWeeks(
-      transactions,
-      prevKey,
-      undefined,
-      paydayWeekday,
-      currency,
-    );
+    });
 
     const currentIncome = sumByType(currentTx, "ingreso", currency);
     const currentExpense = sumByType(currentTx, "gasto", currency);
@@ -140,7 +140,14 @@ export function MonthComparisonChart({
       previousExpense !== 0;
 
     return { rows: nextRows, hasComparableData: hasData };
-  }, [transactions, monthKey, prevKey, currency, paydayWeekday]);
+  }, [
+    transactions,
+    monthKey,
+    prevKey,
+    currency,
+    paydayWeekday,
+    prefilteredMonthTransactions,
+  ]);
 
   if (!hasComparableData) return null;
 

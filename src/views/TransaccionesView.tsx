@@ -12,7 +12,7 @@ import { parseMonthKey } from "@/lib/dates";
 import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { METHOD_LABELS } from "@/lib/format";
-import { filterByMonthPayWeeks } from "@/lib/summaries";
+import { getMonthTransactions } from "@/lib/month-index";
 import type { PaymentMethod, Transaction, TransactionType } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
 import { useToastStore } from "@/store/toast-store";
@@ -185,13 +185,10 @@ export default function TransaccionesView() {
 
   const monthTransactions = useMemo(
     () =>
-      filterByMonthPayWeeks(
-        transactions,
-        selectedMonth,
-        undefined,
+      getMonthTransactions(transactions, selectedMonth, {
         paydayWeekday,
-        defaultCurrency,
-      ),
+        currency: defaultCurrency,
+      }),
     [transactions, selectedMonth, paydayWeekday, defaultCurrency],
   );
 

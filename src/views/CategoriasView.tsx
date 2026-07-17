@@ -10,6 +10,7 @@ import { formatMonthName } from "@/lib/dates";
 import { isActive } from "@/lib/entity-lifecycle";
 import { FOCUS_RING } from "@/lib/focus-ring";
 import { formatMoney, parseMoneyInput } from "@/lib/format";
+import { getMonthTransactions } from "@/lib/month-index";
 import { sumExpenseByCategory } from "@/lib/summaries";
 import type { Budget, Category, CategoryKind, Transaction, UserCategoryRule } from "@/lib/types";
 import { useFinanceStore } from "@/store/finance-store";
@@ -82,6 +83,15 @@ export default function CategoriasView() {
     return map;
   }, [budgets, selectedMonth]);
 
+  const prefilteredMonthTransactions = useMemo(
+    () =>
+      getMonthTransactions(transactions, selectedMonth, {
+        paydayWeekday,
+        currency,
+      }),
+    [transactions, selectedMonth, paydayWeekday, currency],
+  );
+
   const spentByCategoryId = useMemo(
     () =>
       sumExpenseByCategory(
@@ -89,8 +99,16 @@ export default function CategoriasView() {
         selectedMonth,
         paydayWeekday,
         currency,
+        undefined,
+        prefilteredMonthTransactions,
       ),
-    [transactions, selectedMonth, paydayWeekday, currency],
+    [
+      transactions,
+      selectedMonth,
+      paydayWeekday,
+      currency,
+      prefilteredMonthTransactions,
+    ],
   );
 
   const transactionCountByCategoryId = useMemo(() => {
