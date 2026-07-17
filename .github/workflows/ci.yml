@@ -27,7 +27,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # --experimental-strip-types (used by `pnpm test`) needs Node >= 22.6
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies

@@ -17,6 +17,9 @@
     "db:push": "drizzle-kit push",
     "prepare": "husky && node scripts/copy-pdf-worker.mjs"
   },
+  "engines": {
+    "node": ">=22.6.0"
+  },
   "lint-staged": {
     "*.{ts,tsx}": [
       "eslint --max-warnings=0"
