@@ -96,8 +96,10 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  /* Include left/right insets for landscape notch / Dynamic Island (K5). */
-  --page-pad-x: max(16px, var(--safe-left), var(--safe-right));
+  /* Asymmetric L/R for landscape notch / Dynamic Island (K5). */
+  --page-pad-left: max(16px, var(--safe-left));
+  --page-pad-right: max(16px, var(--safe-right));
+  --page-pad-x: max(var(--page-pad-left), var(--page-pad-right));
   --page-pad-y: 16px;
 }
 
@@ -107,7 +109,9 @@
     --fab-size: 52px;
     --fab-clearance: calc(var(--nav-h) + var(--fab-size) + 24px);
     --list-max-h: none;
-    --page-pad-x: max(16px, var(--safe-left), var(--safe-right));
+    --page-pad-left: max(16px, var(--safe-left));
+    --page-pad-right: max(16px, var(--safe-right));
+    --page-pad-x: max(var(--page-pad-left), var(--page-pad-right));
     --page-pad-y: 16px;
   }
 }
@@ -689,6 +693,8 @@ html.dark {
       max-height: min(92dvh, 100%);
       border-radius: 20px 20px 0 0;
       margin-top: auto;
+      padding-left: max(1.25rem, var(--safe-left));
+      padding-right: max(1.25rem, var(--safe-right));
       padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     }
   }
@@ -726,6 +732,21 @@ html.dark {
 
   .mobile-dock {
     transition: opacity 0.18s ease-out;
+  }
+
+  .mobile-dock__bar {
+    padding-left: max(0.5rem, var(--safe-left));
+    padding-right: max(0.5rem, var(--safe-right));
+  }
+
+  .fab-button {
+    right: max(1rem, var(--safe-right));
+  }
+
+  @media (min-width: 880px) {
+    .fab-button {
+      right: max(2rem, var(--safe-right));
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -216,7 +216,7 @@ function SectionNavButton({
 
 function AppGateLoading() {
   return (
-    <div className="min-h-dvh w-full bg-[var(--bg)] px-[var(--page-pad-x)] pt-[var(--page-pad-y)]">
+    <div className="min-h-dvh w-full bg-[var(--bg)] pl-[var(--page-pad-left)] pr-[var(--page-pad-right)] pt-[var(--page-pad-y)]">
       <ViewSkeleton />
     </div>
   );
@@ -512,7 +512,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
         </aside>
 
         <div className="relative flex min-h-0 min-w-0 flex-col overflow-hidden pb-[var(--nav-h)] min-[880px]:pb-0">
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--sidebar-bg)] px-[var(--page-pad-x)] py-2.5 pt-[max(0.625rem,var(--safe-top))] min-[880px]:hidden">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--sidebar-bg)] pl-[var(--page-pad-left)] pr-[var(--page-pad-right)] py-2.5 pt-[max(0.625rem,var(--safe-top))] min-[880px]:hidden">
             <SectionNavButton
               href="/"
               className={`flex min-h-11 items-center gap-2 rounded-lg px-1 transition-soft ${FOCUS_RING}`}
@@ -558,7 +558,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
 
           <main
             id="main-content"
-            className="section-main flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-[var(--page-pad-x)] pt-[var(--page-pad-y)] pb-[calc(var(--fab-clearance)+8px)] min-[880px]:px-10 min-[880px]:pt-8 min-[880px]:pb-10"
+            className="section-main flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pl-[var(--page-pad-left)] pr-[var(--page-pad-right)] pt-[var(--page-pad-y)] pb-[calc(var(--fab-clearance)+8px)] min-[880px]:pl-10 min-[880px]:pr-10 min-[880px]:pt-8 min-[880px]:pb-10"
           >
             <PaydayLoadBanner />
             <div key={section} className="section-enter">
@@ -575,7 +575,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
           aria-label="Móvil"
           aria-hidden={isFormOpen}
         >
-          <div className="mx-auto flex max-w-[var(--shell-max)] justify-around gap-1 border-t border-[var(--line)] bg-[var(--card)] px-2 pt-1.5 shadow-[0_-8px_24px_rgba(31,29,32,0.08)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
+          <div className="mobile-dock__bar mx-auto flex max-w-[var(--shell-max)] justify-around gap-1 border-t border-[var(--line)] bg-[var(--card)] pt-1.5 shadow-[0_-8px_24px_rgba(31,29,32,0.08)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
             {MAIN_NAV_ITEMS.map((item) => {
               const active = isActivePath(section, item.href);
               return (
@@ -614,7 +614,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
               openForm();
             }}
             aria-label="Nueva transacción"
-            className="fab-button absolute z-50 flex h-[var(--fab-size)] w-[var(--fab-size)] items-center justify-center rounded-full bg-[var(--select)] text-[26px] leading-none text-[var(--chip-active-text)] shadow-[var(--shadow-fab)] transition-soft hover:scale-105 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] active:scale-95 max-[879px]:bottom-[calc(var(--nav-h)+16px)] max-[879px]:right-4 min-[880px]:bottom-8 min-[880px]:right-8"
+            className="fab-button absolute z-50 flex h-[var(--fab-size)] w-[var(--fab-size)] items-center justify-center rounded-full bg-[var(--select)] text-[26px] leading-none text-[var(--chip-active-text)] shadow-[var(--shadow-fab)] transition-soft hover:scale-105 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--select)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] active:scale-95 max-[879px]:bottom-[calc(var(--nav-h)+16px)] min-[880px]:bottom-8"
           >
             <span aria-hidden className="mb-0.5">
               +

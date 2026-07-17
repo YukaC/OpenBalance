@@ -59,7 +59,7 @@ export function OnboardingScreen() {
   }
 
   return (
-    <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)] px-4 py-8">
+    <div className="flex min-h-dvh w-full items-center justify-center bg-[var(--bg)] pl-[var(--page-pad-left)] pr-[var(--page-pad-right)] py-8">
       <form
         onSubmit={handleSubmit}
         className="ledger-panel w-full max-w-md space-y-5 p-6 sm:p-8"

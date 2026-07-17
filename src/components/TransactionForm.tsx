@@ -324,7 +324,7 @@ export function TransactionForm() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center p-0 min-[880px]:items-center min-[880px]:p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center p-0 min-[880px]:items-center min-[880px]:pl-[max(1rem,var(--safe-left))] min-[880px]:pr-[max(1rem,var(--safe-right))] min-[880px]:py-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="tx-form-title"
