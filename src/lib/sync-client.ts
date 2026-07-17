@@ -96,6 +96,23 @@ function buildLocalChanges(lastSyncedAt: string | null): SyncChanges {
   return changes;
 }
 
+function changesPayloadSize(changes: SyncChanges): number {
+  return (
+    (changes.transactions?.length ?? 0) +
+    (changes.categories?.length ?? 0) +
+    (changes.budgets?.length ?? 0) +
+    (changes.incomeSources?.length ?? 0) +
+    (changes.userRules?.length ?? 0) +
+    (changes.accounts?.length ?? 0) +
+    (changes.profile ? 1 : 0)
+  );
+}
+
+/** True when local entities changed since last successful cloud sync. */
+export function hasPendingLocalChanges(): boolean {
+  return changesPayloadSize(buildLocalChanges(getLastSyncedAt())) > 0;
+}
+
 function isOfflineError(error: unknown): boolean {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return true;
@@ -107,11 +124,21 @@ function isOfflineError(error: unknown): boolean {
   return false;
 }
 
+export type PushPullSyncOptions = {
+  /**
+   * Keep the request alive after the tab closes (pagehide / background).
+   * Prefer only when flushing pending local changes on leave.
+   */
+  keepalive?: boolean;
+};
+
 /**
  * Push local dirty entities and pull remote changes since lastSyncedAt.
  * Soft-fails when offline or the API is unavailable — local-first stays usable.
  */
-export async function pushPullSync(): Promise<{ ok: boolean; error?: string }> {
+export async function pushPullSync(
+  options: PushPullSyncOptions = {},
+): Promise<{ ok: boolean; error?: string }> {
   if (typeof window !== "undefined" && navigator.onLine === false) {
     return { ok: false, error: "Sin conexión. Los datos siguen en este dispositivo." };
   }
@@ -127,6 +154,7 @@ export async function pushPullSync(): Promise<{ ok: boolean; error?: string }> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
+      keepalive: Boolean(options.keepalive),
       body: JSON.stringify(body),
     });
 

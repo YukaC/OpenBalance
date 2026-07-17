@@ -59,8 +59,9 @@ export function SyncSection() {
       lede={
         authEnabled ? (
           <p className="section-lede">
-            La nube se sincroniza sola al iniciar sesión y otra vez después de
-            10 minutos sin cambios. Este botón fuerza una sync ahora.
+            Sync automática al iniciar sesión; si editás, sube sola tras 10
+            minutos quietos o al salir/ocultar la pestaña (solo si hay cambios
+            pendientes). Este botón fuerza una sync ahora.
           </p>
         ) : (
           <p className="section-lede">
