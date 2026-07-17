@@ -17,11 +17,7 @@ const LOGIN_RETRY_DELAYS_MS = [0, 1500, 4000] as const;
 export const IDLE_ONLINE_RETRY_DELAYS_MS = [2_000, 8_000, 30_000] as const;
 
 const BACKGROUND_SYNC_TAG = "openbalance-sync-pending";
-/** LEGACY: pre-rename tag — still registered so an old SW can wake the client. */
-const LEGACY_BACKGROUND_SYNC_TAG = "rinde-sync-pending";
 const SW_SYNC_MESSAGE_TYPE = "OPENBALANCE_SYNC_PENDING";
-/** LEGACY: pre-rename SW message type (Rinde → OpenBalance). */
-const LEGACY_SW_SYNC_MESSAGE_TYPE = "RINDE_SYNC_PENDING";
 
 let idleTimerId: ReturnType<typeof setTimeout> | null = null;
 let storeUnsubscribe: (() => void) | null = null;
@@ -147,10 +143,7 @@ function requestBackgroundSyncIfSupported() {
         }
       ).sync;
       if (!syncManager?.register) return;
-      return Promise.all([
-        syncManager.register(BACKGROUND_SYNC_TAG),
-        syncManager.register(LEGACY_BACKGROUND_SYNC_TAG).catch(() => undefined),
-      ]);
+      return syncManager.register(BACKGROUND_SYNC_TAG);
     })
     .catch(() => {
       // Background Sync unsupported / denied — online listener still covers reconnect.
@@ -217,10 +210,7 @@ function onServiceWorkerMessage(event: MessageEvent) {
   if (!isAuthEnabled()) return;
   if (activeSessionKey == null) return;
   const data = event.data as { type?: string } | null;
-  if (
-    data?.type !== SW_SYNC_MESSAGE_TYPE &&
-    data?.type !== LEGACY_SW_SYNC_MESSAGE_TYPE
-  ) {
+  if (data?.type !== SW_SYNC_MESSAGE_TYPE) {
     return;
   }
   if (!hasPendingLocalChanges()) return;

@@ -13,8 +13,6 @@ export const ENCRYPTED_BLOB_MARKER = 1 as const;
 
 export interface EncryptedBlob {
   __openBalanceEnc?: typeof ENCRYPTED_BLOB_MARKER;
-  /** LEGACY: @deprecated Rinde-era envelope marker; decrypt still accepted. */
-  __rindeEnc?: typeof ENCRYPTED_BLOB_MARKER;
   iv: string;
   ciphertext: string;
 }
@@ -51,18 +49,11 @@ function fromBase64(base64: string): Uint8Array {
   return bytes;
 }
 
-function hasEncryptedEnvelopeMarker(record: Partial<EncryptedBlob>): boolean {
-  return (
-    record.__openBalanceEnc === ENCRYPTED_BLOB_MARKER ||
-    record.__rindeEnc === ENCRYPTED_BLOB_MARKER
-  );
-}
-
 export function isEncryptedBlob(value: unknown): value is EncryptedBlob {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Partial<EncryptedBlob>;
   return (
-    hasEncryptedEnvelopeMarker(record) &&
+    record.__openBalanceEnc === ENCRYPTED_BLOB_MARKER &&
     typeof record.iv === "string" &&
     typeof record.ciphertext === "string" &&
     record.iv.length > 0 &&

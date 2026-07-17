@@ -6,7 +6,7 @@ Cargá ingresos y gastos con poca fricción, clasificá por keywords y mirá el 
 
 Repo: [YukaC/OpenBalance](https://github.com/YukaC/OpenBalance).
 
-**Nota de migración:** las claves de `localStorage` / IndexedDB pasaron de `rinde-*` a `openbalance-*` (p. ej. tema, finance persist, auth nativo). La app lee las claves legacy y reescribe en el nuevo prefijo para no perder datos.
+Persistencia local: claves `openbalance-*` en `localStorage` / IndexedDB (tema, finance persist, auth nativo).
 
 ## Stack
 

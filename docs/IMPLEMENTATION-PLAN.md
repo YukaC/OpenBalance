@@ -103,8 +103,8 @@ flowchart TD
 - **Done when:** dos pestañas, gana el más nuevo + aviso.
 
 ### A4. Migración persist `v2 → v3`
-- Copiar legacy `rinde-finance-v2` → `openbalance-finance-v3` + `ensureLifecycle` (migración de prefijo `rinde-*` → `openbalance-*`).
-- **Done when:** usuario legacy no pierde datos.
+- Migrar persist a `openbalance-finance-v3` + `ensureLifecycle` (prefijo `openbalance-*`).
+- **Done when:** datos locales previos no se pierden al subir de versión.
 
 ### A5. Fix clock-skew en `isChangedSince` (🔴 riesgo de pérdida silenciosa de datos)
 - Hoy `touch()` marca `updatedAt` con el reloj del **cliente**, pero se compara contra `lastSyncedAt` que viene del reloj del **servidor** (`sync-client.ts`). Si el reloj del cliente va atrás, una edición recién hecha puede quedar con `updatedAt <= lastSyncedAt` y nunca subirse — sin error visible.
@@ -192,7 +192,7 @@ PR: `chore/backend-hardening` (agrupar H1, H5, H6, H7, H8 — bajo esfuerzo) + `
 ### S2. Mover blob cifrado a IndexedDB
 - Más espacio y mejor para binarios que `localStorage`.
 - Zustand persist custom storage adapter (async).
-- Mantener key versionada (`openbalance-finance-v4` o namespace IDB; legacy `rinde-*` se migra).
+- Mantener key versionada (`openbalance-finance-v4` o namespace IDB bajo `openbalance-*`).
 
 ### S3. UX de desbloqueo
 - `PinUnlockScreen` ya existe: debe **desbloquear la clave de cifrado**, no solo ocultar UI.
@@ -576,7 +576,7 @@ Snapshot del repo en esta fecha (glob/grep sobre archivos presentes). Leyenda: *
 | A1 Sync chip | DONE | `SyncStatusChip` + `sync-status.ts` |
 | A2 Flush leave | DONE | `keepalive` dirty-only; smoke en `docs/DEPLOY.md` |
 | A3 LWW toast | DONE | Toast en `applyRemoteSyncChanges` |
-| A4 Migrate v2→v3 | DONE | `finance-store` copia legacy `rinde-finance-v2` → `openbalance-*` |
+| A4 Migrate v2→v3 | DONE | `finance-store` migra a `openbalance-finance-v3` / prefijo `openbalance-*` |
 | A5 Clock-skew | PARTIAL | Skew + tolerancia en `isChangedSince`; falta test “reloj atrasado” explícito |
 | A6 Online retry | DONE | Listener `online` + backoff en `auto-sync.ts` |
 | A7 Echo pull | DONE | `excludeIncomingEcho` en `sync-server.ts` |

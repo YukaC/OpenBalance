@@ -12,9 +12,6 @@ import { isRunningInNativeApp } from "@/lib/device";
 export const NATIVE_AUTH_TOKEN_KEY = "openbalance-native-auth-token";
 export const NATIVE_AUTH_CHANGED_EVENT = "openbalance-native-auth-changed";
 
-/** LEGACY: pre-rename Preferences / localStorage key (Rinde → OpenBalance). */
-const LEGACY_NATIVE_AUTH_TOKEN_KEY = "rinde-native-auth-token";
-
 async function readPreferencesValue(key: string): Promise<string | null> {
   try {
     const { Preferences } = await import("@capacitor/preferences");
@@ -72,16 +69,11 @@ export async function getNativeAuthToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
   if (isRunningInNativeApp()) {
-    const fromPreferences =
-      (await readPreferencesValue(NATIVE_AUTH_TOKEN_KEY)) ??
-      (await readPreferencesValue(LEGACY_NATIVE_AUTH_TOKEN_KEY));
+    const fromPreferences = await readPreferencesValue(NATIVE_AUTH_TOKEN_KEY);
     if (fromPreferences) return fromPreferences;
   }
 
-  return (
-    readLocalStorageValue(NATIVE_AUTH_TOKEN_KEY) ??
-    readLocalStorageValue(LEGACY_NATIVE_AUTH_TOKEN_KEY)
-  );
+  return readLocalStorageValue(NATIVE_AUTH_TOKEN_KEY);
 }
 
 export async function setNativeAuthToken(token: string): Promise<void> {
@@ -90,14 +82,12 @@ export async function setNativeAuthToken(token: string): Promise<void> {
   if (isRunningInNativeApp()) {
     try {
       await writePreferencesValue(NATIVE_AUTH_TOKEN_KEY, token);
-      await removePreferencesValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
     } catch {
       // Fall through to localStorage if Preferences fails.
     }
   }
 
   writeLocalStorageValue(NATIVE_AUTH_TOKEN_KEY, token);
-  removeLocalStorageValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
 
   notifyNativeAuthChanged();
 }
@@ -107,11 +97,9 @@ export async function clearNativeAuthToken(): Promise<void> {
 
   if (isRunningInNativeApp()) {
     await removePreferencesValue(NATIVE_AUTH_TOKEN_KEY);
-    await removePreferencesValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
   }
 
   removeLocalStorageValue(NATIVE_AUTH_TOKEN_KEY);
-  removeLocalStorageValue(LEGACY_NATIVE_AUTH_TOKEN_KEY);
 
   notifyNativeAuthChanged();
 }

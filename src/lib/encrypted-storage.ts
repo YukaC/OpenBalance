@@ -13,20 +13,10 @@ import {
 import { getSessionCryptoKey, isPinEnabled } from "@/lib/pin-lock";
 import type { PersistStorage, StorageValue } from "zustand/middleware";
 
-/** Versioned persist key (S2: IndexedDB primary; localStorage legacy fallback). */
+/** Versioned persist key (IndexedDB primary; localStorage mirror for sync peek). */
 export const FINANCE_STORAGE_NAME = "openbalance-finance-v5";
 
-/** LEGACY: pre-rename localStorage keys — read + copy into FINANCE_STORAGE_NAME when empty. */
-const LEGACY_LOCAL_STORAGE_KEYS = [
-  "rinde-finance-v4",
-  "rinde-finance-v3",
-] as const;
-
 const IDB_NAME = "openbalance-db";
-/** LEGACY: pre-rename IndexedDB database name. */
-const LEGACY_IDB_NAME = "rinde-db";
-/** LEGACY: key used inside the pre-rename Rinde IndexedDB. */
-const LEGACY_IDB_PERSIST_KEY = "rinde-finance-v4";
 const IDB_STORE = "persist";
 const IDB_VERSION = 1;
 
@@ -43,13 +33,13 @@ export function peekWasLastGetLockedCiphertext(): boolean {
   return wasLastGetLockedCiphertext;
 }
 
-function openPersistDb(dbName: string = IDB_NAME): Promise<IDBDatabase> {
+function openPersistDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
       reject(new Error("IndexedDB unavailable"));
       return;
     }
-    const request = indexedDB.open(dbName, IDB_VERSION);
+    const request = indexedDB.open(IDB_NAME, IDB_VERSION);
     request.onerror = () => reject(request.error ?? new Error("IDB open failed"));
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -61,9 +51,9 @@ function openPersistDb(dbName: string = IDB_NAME): Promise<IDBDatabase> {
   });
 }
 
-async function idbGet(key: string, dbName: string = IDB_NAME): Promise<string | null> {
+async function idbGet(key: string): Promise<string | null> {
   try {
-    const db = await openPersistDb(dbName);
+    const db = await openPersistDb();
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(IDB_STORE, "readonly");
       const store = tx.objectStore(IDB_STORE);
@@ -95,9 +85,9 @@ async function idbSet(key: string, value: string): Promise<void> {
   });
 }
 
-async function idbRemove(key: string, dbName: string = IDB_NAME): Promise<void> {
+async function idbRemove(key: string): Promise<void> {
   try {
-    const db = await openPersistDb(dbName);
+    const db = await openPersistDb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(IDB_STORE, "readwrite");
       const store = tx.objectStore(IDB_STORE);
@@ -134,20 +124,9 @@ function removeLocalStorage(key: string): void {
   window.localStorage.removeItem(key);
 }
 
-function removeAllLegacyLocalStorageKeys(): void {
-  for (const legacyKey of LEGACY_LOCAL_STORAGE_KEYS) {
-    removeLocalStorage(legacyKey);
-  }
-}
-
 /** Sync peek for lock UI before async hydrate finishes. */
 export function hasEncryptedFinanceBlobSync(): boolean {
-  const raw =
-    readLocalStorage(FINANCE_STORAGE_NAME) ??
-    LEGACY_LOCAL_STORAGE_KEYS.map(readLocalStorage).find(
-      (value): value is string => Boolean(value),
-    ) ??
-    null;
+  const raw = readLocalStorage(FINANCE_STORAGE_NAME);
   if (!raw) return false;
   try {
     return isEncryptedBlob(JSON.parse(raw));
@@ -156,46 +135,11 @@ export function hasEncryptedFinanceBlobSync(): boolean {
   }
 }
 
-/**
- * Copy a legacy blob into the current IDB + localStorage key, then drop legacy
- * mirrors so future reads prefer the OpenBalance key.
- */
-async function migrateLegacyBlobToCurrent(value: string): Promise<void> {
-  try {
-    await idbSet(FINANCE_STORAGE_NAME, value);
-  } catch {
-    writeLocalStorage(FINANCE_STORAGE_NAME, value);
-    removeAllLegacyLocalStorageKeys();
-    return;
-  }
-  writeLocalStorage(FINANCE_STORAGE_NAME, value);
-  removeAllLegacyLocalStorageKeys();
-  await idbRemove(LEGACY_IDB_PERSIST_KEY, LEGACY_IDB_NAME);
-}
-
 async function readRaw(name: string): Promise<string | null> {
   const fromIdb = await idbGet(name);
   if (fromIdb) return fromIdb;
 
-  const fromLocalCurrent = readLocalStorage(name);
-  if (fromLocalCurrent) return fromLocalCurrent;
-
-  if (name !== FINANCE_STORAGE_NAME) return null;
-
-  const fromLegacyIdb = await idbGet(LEGACY_IDB_PERSIST_KEY, LEGACY_IDB_NAME);
-  if (fromLegacyIdb) {
-    await migrateLegacyBlobToCurrent(fromLegacyIdb);
-    return fromLegacyIdb;
-  }
-
-  for (const legacyKey of LEGACY_LOCAL_STORAGE_KEYS) {
-    const legacy = readLocalStorage(legacyKey);
-    if (legacy) {
-      await migrateLegacyBlobToCurrent(legacy);
-      return legacy;
-    }
-  }
-  return null;
+  return readLocalStorage(name);
 }
 
 async function writeRaw(name: string, value: string): Promise<void> {
@@ -203,26 +147,15 @@ async function writeRaw(name: string, value: string): Promise<void> {
     await idbSet(name, value);
   } catch {
     writeLocalStorage(name, value);
-    if (name === FINANCE_STORAGE_NAME) {
-      removeAllLegacyLocalStorageKeys();
-    }
     return;
   }
   // Keep a localStorage mirror for sync ciphertext detection + recovery.
   writeLocalStorage(name, value);
-  if (name === FINANCE_STORAGE_NAME) {
-    removeAllLegacyLocalStorageKeys();
-    await idbRemove(LEGACY_IDB_PERSIST_KEY, LEGACY_IDB_NAME);
-  }
 }
 
 async function removeRaw(name: string): Promise<void> {
   await idbRemove(name);
   removeLocalStorage(name);
-  if (name === FINANCE_STORAGE_NAME) {
-    removeAllLegacyLocalStorageKeys();
-    await idbRemove(LEGACY_IDB_PERSIST_KEY, LEGACY_IDB_NAME);
-  }
 }
 
 function parseStoredRaw(raw: string): EncryptedBlob | StorageValue<unknown> | null {

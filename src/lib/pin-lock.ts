@@ -7,8 +7,6 @@
 import { deriveKeyFromPin } from "@/lib/crypto-store";
 
 export const PIN_LOCK_STORAGE_KEY = "openbalance-lock";
-/** LEGACY: pre-rename Rinde key — migrated into PIN_LOCK_STORAGE_KEY on read. */
-const LEGACY_PIN_LOCK_STORAGE_KEY = "rinde-lock";
 
 export interface PinLockRecord {
   salt: string;
@@ -56,30 +54,12 @@ function parsePinLockRaw(raw: string): PinLockRecord | null {
   }
 }
 
-function migrateLegacyPinLockIfNeeded(legacyRaw: string): void {
-  try {
-    if (window.localStorage.getItem(PIN_LOCK_STORAGE_KEY)) return;
-    window.localStorage.setItem(PIN_LOCK_STORAGE_KEY, legacyRaw);
-    window.localStorage.removeItem(LEGACY_PIN_LOCK_STORAGE_KEY);
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
 export function readPinLock(): PinLockRecord | null {
   if (typeof window === "undefined") return null;
   try {
     const currentRaw = window.localStorage.getItem(PIN_LOCK_STORAGE_KEY);
-    if (currentRaw) {
-      return parsePinLockRaw(currentRaw);
-    }
-    const legacyRaw = window.localStorage.getItem(LEGACY_PIN_LOCK_STORAGE_KEY);
-    if (!legacyRaw) return null;
-    const parsed = parsePinLockRaw(legacyRaw);
-    if (parsed) {
-      migrateLegacyPinLockIfNeeded(legacyRaw);
-    }
-    return parsed;
+    if (!currentRaw) return null;
+    return parsePinLockRaw(currentRaw);
   } catch {
     return null;
   }
@@ -111,11 +91,6 @@ export async function setPin(pin: string): Promise<void> {
     PIN_LOCK_STORAGE_KEY,
     JSON.stringify({ salt, hash } satisfies PinLockRecord),
   );
-  try {
-    window.localStorage.removeItem(LEGACY_PIN_LOCK_STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
   // Keep a session key so the next persist write encrypts the finance blob.
   sessionCryptoKey = await deriveKeyFromPin(pin, salt);
 }
@@ -145,7 +120,6 @@ export async function verifyPin(pin: string): Promise<boolean> {
 export function clearPin(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(PIN_LOCK_STORAGE_KEY);
-  window.localStorage.removeItem(LEGACY_PIN_LOCK_STORAGE_KEY);
   sessionCryptoKey = null;
 }
 

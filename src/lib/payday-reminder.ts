@@ -64,8 +64,6 @@ export const PAYDAY_NOTIFICATION_BODY =
   "Todavía no cargaste el ingreso de esta semana.";
 
 const PAYDAY_NOTIFY_STORAGE_KEY = "openbalance-payday-notify";
-/** LEGACY: pre-rename localStorage key (Rinde → OpenBalance). */
-const LEGACY_PAYDAY_NOTIFY_STORAGE_KEY = "rinde-payday-notify";
 
 /**
  * Fire a one-shot Web Notification if permission is already granted.
@@ -84,16 +82,9 @@ export function maybeNotifyPaydayLoad(options?: {
   const dayKey =
     options?.dayKey ?? new Date().toISOString().slice(0, 10);
   try {
-    const lastNotified =
-      window.localStorage.getItem(storageKey) ??
-      (storageKey === PAYDAY_NOTIFY_STORAGE_KEY
-        ? window.localStorage.getItem(LEGACY_PAYDAY_NOTIFY_STORAGE_KEY)
-        : null);
+    const lastNotified = window.localStorage.getItem(storageKey);
     if (lastNotified === dayKey) return false;
     window.localStorage.setItem(storageKey, dayKey);
-    if (storageKey === PAYDAY_NOTIFY_STORAGE_KEY) {
-      window.localStorage.removeItem(LEGACY_PAYDAY_NOTIFY_STORAGE_KEY);
-    }
   } catch {
     // localStorage may be unavailable; still try to notify once per session.
   }

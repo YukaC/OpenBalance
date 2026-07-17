@@ -2,7 +2,7 @@
  * Deep link stub (K6) — parse app URL / notification extras and open flows.
  *
  * Supported shapes (best-effort):
- * - openbalance://income (LEGACY: rinde://income still parsed)
+ * - openbalance://income
  * - openbalance://transaction/new?type=ingreso
  * - https://…/open/income
  * - extra.deepLink / extra.action on local notifications
@@ -18,6 +18,15 @@ export type DeepLinkAction = {
   formType: TransactionType;
 };
 
+function isAllowedDeepLinkProtocol(protocol: string): boolean {
+  const scheme = protocol.replace(/:$/, "").toLowerCase();
+  return (
+    scheme === DEFAULT_DEEP_LINK_SCHEME ||
+    scheme === "http" ||
+    scheme === "https"
+  );
+}
+
 export function parseDeepLinkUrl(rawUrl: string): DeepLinkAction | null {
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
@@ -27,6 +36,8 @@ export function parseDeepLinkUrl(rawUrl: string): DeepLinkAction | null {
       ? trimmed
       : `${DEFAULT_DEEP_LINK_SCHEME}://${trimmed.replace(/^\/+/, "")}`;
     const url = new URL(normalized);
+
+    if (!isAllowedDeepLinkProtocol(url.protocol)) return null;
 
     const hostAndPath = `${url.host}${url.pathname}`.replace(/\/+$/, "").toLowerCase();
     const typeParam = url.searchParams.get("type")?.toLowerCase();
@@ -60,6 +71,11 @@ export function parseDeepLinkUrl(rawUrl: string): DeepLinkAction | null {
     }
   } catch {
     const lower = trimmed.toLowerCase();
+    const schemeSeparator = lower.indexOf("://");
+    if (schemeSeparator >= 0) {
+      const scheme = lower.slice(0, schemeSeparator);
+      if (!isAllowedDeepLinkProtocol(scheme)) return null;
+    }
     if (lower.includes("income") || lower.includes("ingreso")) {
       return { type: "open-form", formType: "ingreso" };
     }

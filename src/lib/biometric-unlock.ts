@@ -10,10 +10,6 @@ import { unlockWithPin } from "@/lib/pin-lock";
 const BIOMETRIC_ENABLED_KEY = "openbalance-biometric-enabled";
 const BIOMETRIC_PIN_KEY = "openbalance-biometric-pin";
 
-/** LEGACY: pre-rename Preferences / localStorage keys (Rinde → OpenBalance). */
-const LEGACY_BIOMETRIC_ENABLED_KEY = "rinde-biometric-enabled";
-const LEGACY_BIOMETRIC_PIN_KEY = "rinde-biometric-pin";
-
 async function readPref(key: string): Promise<string | null> {
   if (typeof window === "undefined") return null;
   if (isRunningInNativeApp()) {
@@ -30,14 +26,6 @@ async function readPref(key: string): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** LEGACY: read new key first, then pre-rename Rinde key. */
-async function readPrefWithLegacy(
-  key: string,
-  legacyKey: string,
-): Promise<string | null> {
-  return (await readPref(key)) ?? (await readPref(legacyKey));
 }
 
 async function writePref(key: string, value: string): Promise<void> {
@@ -74,15 +62,6 @@ async function removePref(key: string): Promise<void> {
   }
 }
 
-async function writePrefMigrating(
-  key: string,
-  legacyKey: string,
-  value: string,
-): Promise<void> {
-  await writePref(key, value);
-  await removePref(legacyKey);
-}
-
 export async function isBiometricHardwareAvailable(): Promise<boolean> {
   if (!isRunningInNativeApp()) return false;
   try {
@@ -97,15 +76,9 @@ export async function isBiometricHardwareAvailable(): Promise<boolean> {
 }
 
 export async function isBiometricUnlockEnabled(): Promise<boolean> {
-  const flag = await readPrefWithLegacy(
-    BIOMETRIC_ENABLED_KEY,
-    LEGACY_BIOMETRIC_ENABLED_KEY,
-  );
+  const flag = await readPref(BIOMETRIC_ENABLED_KEY);
   if (flag !== "1") return false;
-  const pin = await readPrefWithLegacy(
-    BIOMETRIC_PIN_KEY,
-    LEGACY_BIOMETRIC_PIN_KEY,
-  );
+  const pin = await readPref(BIOMETRIC_PIN_KEY);
   return Boolean(pin);
 }
 
@@ -127,12 +100,8 @@ export async function enableBiometricUnlock(pin: string): Promise<boolean> {
       cancelTitle: "Cancelar",
       allowDeviceCredential: true,
     });
-    await writePrefMigrating(
-      BIOMETRIC_ENABLED_KEY,
-      LEGACY_BIOMETRIC_ENABLED_KEY,
-      "1",
-    );
-    await writePrefMigrating(BIOMETRIC_PIN_KEY, LEGACY_BIOMETRIC_PIN_KEY, pin);
+    await writePref(BIOMETRIC_ENABLED_KEY, "1");
+    await writePref(BIOMETRIC_PIN_KEY, pin);
     return true;
   } catch {
     return false;
@@ -141,9 +110,7 @@ export async function enableBiometricUnlock(pin: string): Promise<boolean> {
 
 export async function disableBiometricUnlock(): Promise<void> {
   await removePref(BIOMETRIC_ENABLED_KEY);
-  await removePref(LEGACY_BIOMETRIC_ENABLED_KEY);
   await removePref(BIOMETRIC_PIN_KEY);
-  await removePref(LEGACY_BIOMETRIC_PIN_KEY);
 }
 
 /**
@@ -165,10 +132,7 @@ export async function unlockWithBiometric(): Promise<boolean> {
     return false;
   }
 
-  const pin = await readPrefWithLegacy(
-    BIOMETRIC_PIN_KEY,
-    LEGACY_BIOMETRIC_PIN_KEY,
-  );
+  const pin = await readPref(BIOMETRIC_PIN_KEY);
   if (!pin) return false;
   return unlockWithPin(pin);
 }

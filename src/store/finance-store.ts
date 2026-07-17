@@ -271,56 +271,6 @@ function migrateEntitiesForSync<T extends { updatedAt?: string; deletedAt?: stri
   return entities.map((entity) => ensureLifecycle(entity, nowIso));
 }
 
-/** LEGACY: Rinde persist keys — bridge into openbalance-finance-v5 via encrypted-storage. */
-const FINANCE_PERSIST_V2_KEY = "rinde-finance-v2";
-const FINANCE_PERSIST_V3_KEY = "rinde-finance-v3";
-
-/** True when v3 persist payload is missing or has no meaningful ledger/profile. */
-function isEmptyFinancePersistPayload(raw: string | null): boolean {
-  if (!raw) return true;
-  try {
-    const parsed = JSON.parse(raw) as {
-      state?: {
-        transactions?: unknown[];
-        profile?: { name?: string; isSetupComplete?: boolean };
-      };
-    };
-    const state = parsed.state;
-    if (!state) return true;
-    if (Array.isArray(state.transactions) && state.transactions.length > 0) {
-      return false;
-    }
-    if (state.profile?.isSetupComplete) return false;
-    if (typeof state.profile?.name === "string" && state.profile.name.trim()) {
-      return false;
-    }
-    return true;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * A4 / LEGACY: copy `rinde-finance-v2` into `rinde-finance-v3` when v3 is
- * absent/empty. encrypted-storage then promotes v3/v4 → `openbalance-finance-v5`.
- * Must run before zustand persist reads storage. Lifecycle fields are filled
- * later in onRehydrateStorage via ensureLifecycle / migrateEntitiesForSync.
- */
-function migrateFinancePersistV2ToV3IfNeeded(): void {
-  if (typeof window === "undefined") return;
-  try {
-    const v2Raw = localStorage.getItem(FINANCE_PERSIST_V2_KEY);
-    if (!v2Raw) return;
-    const v3Raw = localStorage.getItem(FINANCE_PERSIST_V3_KEY);
-    if (!isEmptyFinancePersistPayload(v3Raw)) return;
-    localStorage.setItem(FINANCE_PERSIST_V3_KEY, v2Raw);
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-migrateFinancePersistV2ToV3IfNeeded();
-
 export const useFinanceStore = create<FinanceState>()(
   persist(
     (set, get) => ({

@@ -39,22 +39,13 @@ function SectionLoading() {
 }
 
 const CHUNK_RELOAD_KEY = "openbalance-chunk-reload";
-/** LEGACY: pre-rename sessionStorage flag — migrated on read. */
-const LEGACY_CHUNK_RELOAD_KEY = "rinde-chunk-reload";
 
 function readChunkReloadFlag(): boolean {
-  if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return true;
-  if (sessionStorage.getItem(LEGACY_CHUNK_RELOAD_KEY)) {
-    sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
-    sessionStorage.removeItem(LEGACY_CHUNK_RELOAD_KEY);
-    return true;
-  }
-  return false;
+  return Boolean(sessionStorage.getItem(CHUNK_RELOAD_KEY));
 }
 
 function clearChunkReloadFlag(): void {
   sessionStorage.removeItem(CHUNK_RELOAD_KEY);
-  sessionStorage.removeItem(LEGACY_CHUNK_RELOAD_KEY);
 }
 
 function importWithChunkRetry<T>(

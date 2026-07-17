@@ -21,8 +21,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            // LEGACY: purge pre-rename rinde-* caches plus any non-current version
-            .filter((key) => /rinde/i.test(key) || key !== CACHE_VERSION)
+            .filter((key) => key !== CACHE_VERSION)
             .map((key) => caches.delete(key)),
         ),
       )
@@ -118,17 +117,12 @@ self.addEventListener("fetch", (event) => {
  * Optional Background Sync (O2): when the browser fires `sync` for our tag,
  * nudge open clients to flush pending local changes. Sync itself stays in the
  * page (cookies / Zustand); the SW only postMessages.
- * Client still registers the legacy Rinde tag so older installs wake correctly.
  */
 const SYNC_PENDING_TAG = "openbalance-sync-pending";
-const LEGACY_SYNC_PENDING_TAG = "rinde-sync-pending";
 const SYNC_PENDING_MESSAGE = { type: "OPENBALANCE_SYNC_PENDING" };
 
 self.addEventListener("sync", (event) => {
-  if (
-    event.tag !== SYNC_PENDING_TAG &&
-    event.tag !== LEGACY_SYNC_PENDING_TAG
-  ) {
+  if (event.tag !== SYNC_PENDING_TAG) {
     return;
   }
   event.waitUntil(

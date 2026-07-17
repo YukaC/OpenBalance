@@ -12,24 +12,10 @@ function getPaydayDismissKey(referenceDate: Date = new Date()): string {
   return `openbalance-payday-dismiss-${dayKey}`;
 }
 
-/** LEGACY: read-only migration from pre-rename sessionStorage keys. */
-function getLegacyPaydayDismissKey(referenceDate: Date = new Date()): string {
-  const dayKey = referenceDate.toISOString().slice(0, 10);
-  return `rinde-payday-dismiss-${dayKey}`;
-}
-
 function readPaydayDismissed(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const key = getPaydayDismissKey();
-    if (sessionStorage.getItem(key) === "1") return true;
-    const legacyKey = getLegacyPaydayDismissKey();
-    if (sessionStorage.getItem(legacyKey) === "1") {
-      sessionStorage.setItem(key, "1");
-      sessionStorage.removeItem(legacyKey);
-      return true;
-    }
-    return false;
+    return sessionStorage.getItem(getPaydayDismissKey()) === "1";
   } catch {
     return false;
   }

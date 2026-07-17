@@ -72,11 +72,11 @@ export default async function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        {/* Theme FOUC guard; LEGACY: also reads rinde-theme before openbalance-theme rewrite */}
+        {/* Theme FOUC guard */}
         <script
           nonce={nonce}
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("openbalance-theme")||localStorage.getItem("rinde-theme");var dark=t==="dark"||((t==="system"||!t)&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark"}else{document.documentElement.style.colorScheme="light"}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("openbalance-theme");var dark=t==="dark"||((t==="system"||!t)&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark){document.documentElement.classList.add("dark");document.documentElement.style.colorScheme="dark"}else{document.documentElement.style.colorScheme="light"}}catch(e){}})();`,
           }}
         />
       </head>
