@@ -1,5 +1,19 @@
-# pnpm 11: approve native postinstall scripts required by Next.js / drizzle-kit
+packages:
+  - "."
+
 allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+overrides:
+  "@xmldom/xmldom": "0.9.12"
+  js-yaml: "4.3.2"
+  postcss: "8.5.23"
+  nanoid: "3.3.18"
+  sharp: "0.35.5"
+  tar: "7.5.21"
+  "minimatch@3>brace-expansion": "1.1.18"
+  "minimatch@5>brace-expansion": "2.1.7"
+  "minimatch@9>brace-expansion": "2.1.7"
+  "minimatch@10>brace-expansion": "5.0.12"
