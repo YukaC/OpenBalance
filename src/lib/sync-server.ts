@@ -548,6 +548,21 @@ function sinceFilter(lastSyncedAt: string | null) {
   return parsed;
 }
 
+async function fetchAllBatched<T>(
+  fetchChunk: (limit: number, offset: number) => Promise<T[]>,
+  batchSize = 1000,
+): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const chunk = await fetchChunk(batchSize, offset);
+    all.push(...chunk);
+    if (chunk.length < batchSize) break;
+    offset += chunk.length;
+  }
+  return all;
+}
+
 export async function collectOutgoingChanges(
   db: AppDatabase,
   userId: string,
@@ -586,13 +601,25 @@ export async function collectOutgoingChanges(
     ruleRows,
     txRows,
   ] = await Promise.all([
-    db.select().from(profiles).where(profileWhere),
-    db.select().from(accounts).where(accountWhere),
-    db.select().from(categories).where(categoryWhere),
-    db.select().from(incomeSources).where(incomeWhere),
-    db.select().from(budgets).where(budgetWhere),
-    db.select().from(userRules).where(ruleWhere),
-    db.select().from(transactions).where(txWhere),
+    db.select().from(profiles).where(profileWhere).limit(1),
+    fetchAllBatched((limit, offset) =>
+      db.select().from(accounts).where(accountWhere).limit(limit).offset(offset),
+    ),
+    fetchAllBatched((limit, offset) =>
+      db.select().from(categories).where(categoryWhere).limit(limit).offset(offset),
+    ),
+    fetchAllBatched((limit, offset) =>
+      db.select().from(incomeSources).where(incomeWhere).limit(limit).offset(offset),
+    ),
+    fetchAllBatched((limit, offset) =>
+      db.select().from(budgets).where(budgetWhere).limit(limit).offset(offset),
+    ),
+    fetchAllBatched((limit, offset) =>
+      db.select().from(userRules).where(ruleWhere).limit(limit).offset(offset),
+    ),
+    fetchAllBatched((limit, offset) =>
+      db.select().from(transactions).where(txWhere).limit(limit).offset(offset),
+    ),
   ]);
 
   const profileRow = profileRows[0];

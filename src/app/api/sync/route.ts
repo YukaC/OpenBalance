@@ -130,7 +130,20 @@ export async function POST(request: Request) {
       userId,
       message: "Sync completed",
     });
-    return NextResponse.json(result);
+    const totalCount =
+      (result.changes.transactions?.length ?? 0) +
+      (result.changes.categories?.length ?? 0) +
+      (result.changes.budgets?.length ?? 0) +
+      (result.changes.incomeSources?.length ?? 0) +
+      (result.changes.userRules?.length ?? 0) +
+      (result.changes.accounts?.length ?? 0) +
+      (result.changes.profile ? 1 : 0);
+    return NextResponse.json(result, {
+      headers: {
+        "X-Total-Count": String(totalCount),
+        "X-Truncated": "false",
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown";
     const code =

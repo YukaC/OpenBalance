@@ -44,6 +44,7 @@ export async function trySendResetEmail(
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
+      signal: AbortSignal.timeout(5000),
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendApiKey}`,
