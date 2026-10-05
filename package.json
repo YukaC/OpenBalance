@@ -43,7 +43,7 @@
     "@tanstack/react-virtual": "^3.14.13",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "next": "15.5.24",
     "next-auth": "^5.0.0-beta.32",
     "pdfjs-dist": "^6.2.108",
