@@ -26,37 +26,37 @@ importers:
         version: 10.0.0
       '@capacitor/android':
         specifier: ^8.4.2
-        version: 8.4.2(@capacitor/core@8.4.2)
+        version: 8.4.2(@capacitor/core@8.5.2)
       '@capacitor/app':
         specifier: ^8.1.1
-        version: 8.1.1(@capacitor/core@8.4.2)
+        version: 8.1.1(@capacitor/core@8.5.2)
       '@capacitor/cli':
         specifier: ^8.4.2
         version: 8.4.2
       '@capacitor/core':
-        specifier: ^8.4.2
-        version: 8.4.2
+        specifier: ^8.5.2
+        version: 8.5.2
       '@capacitor/filesystem':
         specifier: ^8.1.2
-        version: 8.1.2(@capacitor/core@8.4.2)
+        version: 8.1.2(@capacitor/core@8.5.2)
       '@capacitor/haptics':
         specifier: ^8.0.2
-        version: 8.0.2(@capacitor/core@8.4.2)
+        version: 8.0.2(@capacitor/core@8.5.2)
       '@capacitor/ios':
         specifier: ^8.4.2
-        version: 8.4.2(@capacitor/core@8.4.2)
+        version: 8.4.2(@capacitor/core@8.5.2)
       '@capacitor/local-notifications':
         specifier: ^8.2.1
-        version: 8.2.1(@capacitor/core@8.4.2)
+        version: 8.2.1(@capacitor/core@8.5.2)
       '@capacitor/preferences':
         specifier: ^8.0.1
-        version: 8.0.1(@capacitor/core@8.4.2)
+        version: 8.0.1(@capacitor/core@8.5.2)
       '@capacitor/share':
         specifier: ^8.0.1
-        version: 8.0.1(@capacitor/core@8.4.2)
+        version: 8.0.1(@capacitor/core@8.5.2)
       '@capacitor/splash-screen':
         specifier: ^8.0.2
-        version: 8.0.2(@capacitor/core@8.4.2)
+        version: 8.0.2(@capacitor/core@8.5.2)
       '@tanstack/react-virtual':
         specifier: ^3.14.13
         version: 3.14.13(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -176,8 +176,8 @@ packages:
     engines: {node: '>=22.0.0'}
     hasBin: true
 
-  '@capacitor/core@8.4.2':
-    resolution: {integrity: sha512-fQPRb3JXRaU2pnufDUvqOjhsrYxDQeFRZyaj/sHydIUxD2NxOGHKMpmKUdI+U4OOmKuGZyvRpi7TSJU+7Bjbmg==}
+  '@capacitor/core@8.5.2':
+    resolution: {integrity: sha512-agnQbGdhGw/KZFuLf7H9SY2o+oE7upkr/WPQsYaokXP6f9chaE8iVmbKkfN6SVl4w3pmz7oZ3Ur1hbkmy1hx+w==}
 
   '@capacitor/filesystem@8.1.2':
     resolution: {integrity: sha512-doaaMfGoFR2hWU6aV6u83I+5ZsGyJVq+Gz4r9lMpJzUKMm1eMu0hLnFdV1aXZlU9FlK/RndFrVD8oRZfNOqWgQ==}
@@ -1629,6 +1629,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -2827,10 +2828,10 @@ snapshots:
 
   '@aparajita/capacitor-biometric-auth@10.0.0':
     dependencies:
-      '@capacitor/android': 8.4.2(@capacitor/core@8.4.2)
-      '@capacitor/app': 8.1.1(@capacitor/core@8.4.2)
-      '@capacitor/core': 8.4.2
-      '@capacitor/ios': 8.4.2(@capacitor/core@8.4.2)
+      '@capacitor/android': 8.4.2(@capacitor/core@8.5.2)
+      '@capacitor/app': 8.1.1(@capacitor/core@8.5.2)
+      '@capacitor/core': 8.5.2
+      '@capacitor/ios': 8.4.2(@capacitor/core@8.5.2)
 
   '@auth/core@0.41.3':
     dependencies:
@@ -2840,13 +2841,13 @@ snapshots:
       preact: 10.24.3
       preact-render-to-string: 6.5.11(preact@10.24.3)
 
-  '@capacitor/android@8.4.2(@capacitor/core@8.4.2)':
+  '@capacitor/android@8.4.2(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
-  '@capacitor/app@8.1.1(@capacitor/core@8.4.2)':
+  '@capacitor/app@8.1.1(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
   '@capacitor/cli@8.4.2':
     dependencies:
@@ -2870,38 +2871,38 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@capacitor/core@8.4.2':
+  '@capacitor/core@8.5.2':
     dependencies:
       tslib: 2.8.1
 
-  '@capacitor/filesystem@8.1.2(@capacitor/core@8.4.2)':
+  '@capacitor/filesystem@8.1.2(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
       '@capacitor/synapse': 1.0.4
 
-  '@capacitor/haptics@8.0.2(@capacitor/core@8.4.2)':
+  '@capacitor/haptics@8.0.2(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
-  '@capacitor/ios@8.4.2(@capacitor/core@8.4.2)':
+  '@capacitor/ios@8.4.2(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
-  '@capacitor/local-notifications@8.2.1(@capacitor/core@8.4.2)':
+  '@capacitor/local-notifications@8.2.1(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
-  '@capacitor/preferences@8.0.1(@capacitor/core@8.4.2)':
+  '@capacitor/preferences@8.0.1(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
-  '@capacitor/share@8.0.1(@capacitor/core@8.4.2)':
+  '@capacitor/share@8.0.1(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
-  '@capacitor/splash-screen@8.0.2(@capacitor/core@8.4.2)':
+  '@capacitor/splash-screen@8.0.2(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.4.2
+      '@capacitor/core': 8.5.2
 
   '@capacitor/synapse@1.0.4': {}
 
